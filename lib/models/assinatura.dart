@@ -1,4 +1,5 @@
-/// Modelo que representa a assinatura ativa de uma aluna.
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class Assinatura {
   final String id;
   final String alunaId;
@@ -8,6 +9,9 @@ class Assinatura {
   final DateTime dataInicio;
   final DateTime dataRenovacao;
   final DateTime? dataCancelamento;
+  final List<String> horarioFixoIds;
+  final int aulasRealizadas;
+  final int reposicoesDisponiveis;
 
   const Assinatura({
     required this.id,
@@ -18,7 +22,15 @@ class Assinatura {
     required this.dataInicio,
     required this.dataRenovacao,
     this.dataCancelamento,
+    this.horarioFixoIds = const [],
+    this.aulasRealizadas = 0,
+    this.reposicoesDisponiveis = 0,
   });
+
+  int? get aulasRestantes =>
+      creditosDisponiveis > 0 ? creditosDisponiveis : null;
+
+  bool get estaAtiva => status == 'ativa';
 
   factory Assinatura.fromMap(Map<String, dynamic> mapa, String id) {
     return Assinatura(
@@ -32,6 +44,40 @@ class Assinatura {
       dataCancelamento: mapa['dataCancelamento'] != null
           ? DateTime.parse(mapa['dataCancelamento'] as String)
           : null,
+      horarioFixoIds: (mapa['horarioFixoIds'] as List<dynamic>?)
+              ?.cast<String>() ??
+          [],
+      aulasRealizadas: mapa['aulasRealizadas'] as int? ?? 0,
+      reposicoesDisponiveis: mapa['reposicoesDisponiveis'] as int? ?? 0,
+    );
+  }
+
+  factory Assinatura.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final mapa = doc.data()!;
+    return Assinatura(
+      id: doc.id,
+      alunaId: mapa['alunaId'] as String,
+      planoId: mapa['planoId'] as String,
+      status: mapa['status'] as String,
+      creditosDisponiveis: mapa['creditosDisponiveis'] as int,
+      dataInicio: (mapa['dataInicio'] is Timestamp)
+          ? (mapa['dataInicio'] as Timestamp).toDate()
+          : DateTime.parse(mapa['dataInicio'] as String),
+      dataRenovacao: (mapa['dataRenovacao'] is Timestamp)
+          ? (mapa['dataRenovacao'] as Timestamp).toDate()
+          : DateTime.parse(mapa['dataRenovacao'] as String),
+      dataCancelamento: mapa['dataCancelamento'] != null
+          ? (mapa['dataCancelamento'] is Timestamp
+              ? (mapa['dataCancelamento'] as Timestamp).toDate()
+              : DateTime.parse(mapa['dataCancelamento'] as String))
+          : null,
+      horarioFixoIds: (mapa['horarioFixoIds'] as List<dynamic>?)
+              ?.cast<String>() ??
+          [],
+      aulasRealizadas: mapa['aulasRealizadas'] as int? ?? 0,
+      reposicoesDisponiveis: mapa['reposicoesDisponiveis'] as int? ?? 0,
     );
   }
 
@@ -44,8 +90,38 @@ class Assinatura {
       'dataInicio': dataInicio.toIso8601String(),
       'dataRenovacao': dataRenovacao.toIso8601String(),
       'dataCancelamento': dataCancelamento?.toIso8601String(),
+      'horarioFixoIds': horarioFixoIds,
+      'aulasRealizadas': aulasRealizadas,
+      'reposicoesDisponiveis': reposicoesDisponiveis,
     };
   }
 
-  bool get estaAtiva => status == 'ativa';
+  Assinatura copyWith({
+    String? id,
+    String? alunaId,
+    String? planoId,
+    String? status,
+    int? creditosDisponiveis,
+    DateTime? dataInicio,
+    DateTime? dataRenovacao,
+    DateTime? dataCancelamento,
+    List<String>? horarioFixoIds,
+    int? aulasRealizadas,
+    int? reposicoesDisponiveis,
+  }) {
+    return Assinatura(
+      id: id ?? this.id,
+      alunaId: alunaId ?? this.alunaId,
+      planoId: planoId ?? this.planoId,
+      status: status ?? this.status,
+      creditosDisponiveis: creditosDisponiveis ?? this.creditosDisponiveis,
+      dataInicio: dataInicio ?? this.dataInicio,
+      dataRenovacao: dataRenovacao ?? this.dataRenovacao,
+      dataCancelamento: dataCancelamento ?? this.dataCancelamento,
+      horarioFixoIds: horarioFixoIds ?? this.horarioFixoIds,
+      aulasRealizadas: aulasRealizadas ?? this.aulasRealizadas,
+      reposicoesDisponiveis:
+          reposicoesDisponiveis ?? this.reposicoesDisponiveis,
+    );
+  }
 }

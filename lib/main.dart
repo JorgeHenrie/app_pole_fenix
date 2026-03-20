@@ -3,6 +3,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/home_aluna_provider.dart';
+import 'providers/horario_fixo_provider.dart';
+import 'providers/reposicao_provider.dart';
 import 'app.dart';
 
 void main() async {
@@ -13,6 +15,8 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => HomeAlunaProvider()),
+        ChangeNotifierProvider(create: (_) => HorarioFixoProvider()),
+        ChangeNotifierProvider(create: (_) => ReposicaoProvider()),
       ],
       child: const App(),
     ),
