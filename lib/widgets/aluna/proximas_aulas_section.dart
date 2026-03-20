@@ -66,9 +66,9 @@ class ProximasAulasSection extends StatelessWidget {
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: () =>
-                Navigator.pushNamed(context, Routes.agendarAula),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Agendar Aula'),
+                Navigator.pushNamed(context, Routes.meusHorarios),
+            icon: const Icon(Icons.schedule, size: 18),
+            label: const Text('Meus Horários'),
           ),
         ],
       ),
@@ -148,7 +148,7 @@ class _AulaItemCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    aula.titulo,
+                    aula.titulo ?? aula.modalidade,
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
@@ -173,21 +173,23 @@ class _AulaItemCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.timer_outlined,
-                          size: 14, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${aula.duracaoMinutos} min',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                  if (aula.duracaoMinutos != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.timer_outlined,
+                            size: 14, color: AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${aula.duracaoMinutos} min',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

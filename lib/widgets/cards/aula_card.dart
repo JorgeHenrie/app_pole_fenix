@@ -15,7 +15,7 @@ class AulaCard extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: const Icon(Icons.fitness_center),
-        title: Text(aula.titulo),
+        title: Text(aula.titulo ?? aula.modalidade),
         subtitle: Text(DateFormatter.dataHora(aula.dataHora)),
         trailing: Text(
           '${aula.vagasDisponiveis} vaga(s)',

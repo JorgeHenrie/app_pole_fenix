@@ -15,4 +15,5 @@ class Routes {
   static const String gerenciarAlunas = '/gerenciar-alunas';
   static const String pagamentos = '/pagamentos';
   static const String eventosAdmin = '/eventos-admin';
+  static const String meusHorarios = '/meus-horarios';
 }
