@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/routes.dart';
 import 'screens/splash/splash_screen.dart';
@@ -24,35 +23,29 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        // Providers serão adicionados aqui
-      ],
-      child: MaterialApp(
-        title: 'Fênix Pole Dance',
-        theme: AppTheme.lightTheme,
-        debugShowCheckedModeBanner: false,
-        initialRoute: Routes.splash,
-        routes: {
-          Routes.splash: (context) => const SplashScreen(),
-          Routes.login: (context) => const LoginScreen(),
-          Routes.cadastro: (context) => const CadastroScreen(),
-          Routes.recuperarSenha: (context) => const RecuperarSenhaScreen(),
-          Routes.homeAluna: (context) => const HomeAlunaScreen(),
-          Routes.agendarAula: (context) => const AgendarAulaScreen(),
-          Routes.minhasAulas: (context) => const MinhasAulasScreen(),
-          Routes.meuPlano: (context) => const MeuPlanoScreen(),
-          Routes.perfil: (context) => const PerfilScreen(),
-          Routes.eventos: (context) => const EventosScreen(),
-          Routes.homeAdmin: (context) => const HomeAdminScreen(),
-          Routes.gerenciarHorarios: (context) =>
-              const GerenciarHorariosScreen(),
-          Routes.gerenciarAulas: (context) => const GerenciarAulasScreen(),
-          Routes.gerenciarAlunas: (context) => const GerenciarAlunasScreen(),
-          Routes.pagamentos: (context) => const PagamentosScreen(),
-          Routes.eventosAdmin: (context) => const EventosAdminScreen(),
-        },
-      ),
+    return MaterialApp(
+      title: 'Fênix Pole Dance',
+      theme: AppTheme.lightTheme,
+      debugShowCheckedModeBanner: false,
+      initialRoute: Routes.splash,
+      routes: {
+        Routes.splash: (context) => const SplashScreen(),
+        Routes.login: (context) => const LoginScreen(),
+        Routes.cadastro: (context) => const CadastroScreen(),
+        Routes.recuperarSenha: (context) => const RecuperarSenhaScreen(),
+        Routes.homeAluna: (context) => const HomeAlunaScreen(),
+        Routes.agendarAula: (context) => const AgendarAulaScreen(),
+        Routes.minhasAulas: (context) => const MinhasAulasScreen(),
+        Routes.meuPlano: (context) => const MeuPlanoScreen(),
+        Routes.perfil: (context) => const PerfilScreen(),
+        Routes.eventos: (context) => const EventosScreen(),
+        Routes.homeAdmin: (context) => const HomeAdminScreen(),
+        Routes.gerenciarHorarios: (context) => const GerenciarHorariosScreen(),
+        Routes.gerenciarAulas: (context) => const GerenciarAulasScreen(),
+        Routes.gerenciarAlunas: (context) => const GerenciarAlunasScreen(),
+        Routes.pagamentos: (context) => const PagamentosScreen(),
+        Routes.eventosAdmin: (context) => const EventosAdminScreen(),
+      },
     );
   }
 }
