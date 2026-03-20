@@ -40,7 +40,7 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
   Future<void> _carregarDados() async {
     setState(() => _carregando = true);
     try {
-      final grade = await _gradeRepo.listarAtivos();
+      final grade = await _gradeRepo.listarTodos();
       final Map<String, int> ocupacao = {};
       for (final slot in grade) {
         final count = await _horarioFixoRepo.contarOcupacao(

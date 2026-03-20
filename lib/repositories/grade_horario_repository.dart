@@ -15,6 +15,13 @@ class GradeHorarioRepository {
         .toList();
   }
 
+  Future<List<GradeHorario>> listarTodos() async {
+    final snapshot = await _firestore.colecao(_colecao).get();
+    return snapshot.docs
+        .map((doc) => GradeHorario.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
   Future<List<GradeHorario>> listarPorDia(int diaSemana) async {
     final snapshot = await _firestore
         .colecao(_colecao)
