@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.fenixpoledance.app_pole_fenix">
     <application
         android:label="Fênix Pole Dance"
         android:name="${applicationName}"
