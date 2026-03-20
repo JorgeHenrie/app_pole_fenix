@@ -11,10 +11,10 @@ class AcoesRapidasGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final acoes = [
       _AcaoRapida(
-        icone: Icons.calendar_month,
-        rotulo: 'Agendar Aula',
+        icone: Icons.schedule,
+        rotulo: 'Meus Horários',
         cor: AppColors.primary,
-        rota: Routes.agendarAula,
+        rota: Routes.meusHorarios,
       ),
       _AcaoRapida(
         icone: Icons.fitness_center,
@@ -39,6 +39,12 @@ class AcoesRapidasGrid extends StatelessWidget {
         rotulo: 'Perfil',
         cor: const Color(0xFF00897B),
         rota: Routes.perfil,
+      ),
+      _AcaoRapida(
+        icone: Icons.refresh,
+        rotulo: 'Reposições',
+        cor: const Color(0xFF1565C0),
+        rota: Routes.minhasReposicoes,
       ),
     ];
 
