@@ -1,0 +1,56 @@
+name: app_pole_fenix
+description: App de gerenciamento para o estúdio Fênix Pole Dance.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  firebase_storage: ^11.6.0
+  firebase_messaging: ^14.7.10
+
+  # Gerenciamento de Estado
+  provider: ^6.1.1
+
+  # Navegação
+  go_router: ^13.0.0
+
+  # UI
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  flutter_svg: ^2.0.9
+  cached_network_image: ^3.3.1
+
+  # Formulários e Validação
+  mask_text_input_formatter: ^2.9.0
+
+  # Datas
+  intl: ^0.19.0
+
+  # Utilidades
+  uuid: ^4.3.3
+  url_launcher: ^6.2.4
+  image_picker: ^1.0.7
+  file_picker: ^6.1.1
+  path_provider: ^2.1.2
+
+  # PDF (para comprovantes)
+  pdf: ^3.10.7
+  printing: ^5.12.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
