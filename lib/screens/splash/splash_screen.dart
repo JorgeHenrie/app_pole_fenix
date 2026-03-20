@@ -1,21 +1,116 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../core/constants/routes.dart';
+import '../../core/theme/app_colors.dart';
 
 /// Tela de splash exibida ao iniciar o app.
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _verificarAutenticacao();
+  }
+
+  Future<void> _verificarAutenticacao() async {
+    final authProvider = context.read<AuthProvider>();
+
+    // Aguarda mínimo de 2 segundos E estado de auth resolvido
+    await Future.wait([
+      Future.delayed(const Duration(seconds: 2)),
+      _aguardarEstadoDefinido(authProvider),
+    ]);
+
+    if (!mounted) return;
+
+    if (authProvider.estaAutenticado) {
+      // Aguarda dados do usuário do Firestore se necessário
+      if (authProvider.usuario == null) {
+        await _aguardarUsuario(authProvider);
+      }
+
+      if (!mounted) return;
+
+      if (authProvider.usuario != null) {
+        final destino = authProvider.usuario!.tipoUsuario == 'admin'
+            ? Routes.homeAdmin
+            : Routes.homeAluna;
+        Navigator.of(context).pushReplacementNamed(destino);
+      } else {
+        Navigator.of(context).pushReplacementNamed(Routes.login);
+      }
+    } else {
+      Navigator.of(context).pushReplacementNamed(Routes.login);
+    }
+  }
+
+  Future<void> _aguardarEstadoDefinido(AuthProvider authProvider) async {
+    if (authProvider.estado != EstadoAuth.inicial) return;
+
+    final completer = Completer<void>();
+    void listener() {
+      if (authProvider.estado != EstadoAuth.inicial) {
+        if (!completer.isCompleted) completer.complete();
+      }
+    }
+
+    authProvider.addListener(listener);
+    try {
+      await completer.future.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      debugPrint('SplashScreen: timeout ao aguardar estado de autenticação');
+    }
+    authProvider.removeListener(listener);
+  }
+
+  Future<void> _aguardarUsuario(AuthProvider authProvider) async {
+    final completer = Completer<void>();
+    void listener() {
+      if (authProvider.usuario != null || !authProvider.estaAutenticado) {
+        if (!completer.isCompleted) completer.complete();
+      }
+    }
+
+    authProvider.addListener(listener);
+    try {
+      await completer.future.timeout(const Duration(seconds: 3));
+    } on TimeoutException {
+      debugPrint('SplashScreen: timeout ao aguardar dados do usuário');
+    }
+    authProvider.removeListener(listener);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.primary,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.self_improvement, size: 80),
-            const SizedBox(height: 16),
+            const Icon(Icons.self_improvement, size: 100, color: Colors.white),
+            const SizedBox(height: 24),
             Text(
               'Fênix Pole Dance',
-              style: Theme.of(context).textTheme.headlineMedium,
+              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 48),
+            const CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 3,
             ),
           ],
         ),
