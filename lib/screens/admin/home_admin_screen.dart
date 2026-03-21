@@ -75,6 +75,14 @@ class HomeAdminScreen extends StatelessWidget {
             color: AppColors.warning,
             rota: Routes.validarAtestados,
           ),
+          _buildMenuCard(
+            context,
+            icon: Icons.credit_card,
+            title: 'Gerenciar Planos',
+            subtitle: 'Criar e editar planos de assinatura',
+            color: const Color(0xFF2E7D32),
+            rota: Routes.gerenciarPlanos,
+          ),
           const SizedBox(height: 8),
           _buildSectionTitle(context, 'Gestão'),
           _buildMenuCard(
