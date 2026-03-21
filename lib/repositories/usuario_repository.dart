@@ -49,7 +49,7 @@ class UsuarioRepository {
         .collection(_colecao)
         .where('tipoUsuario', isEqualTo: 'aluna')
         .where('statusCadastro', isEqualTo: 'pendente')
-        .orderBy('dataCadastro', descending: true)
+        .orderBy('criadoEm', descending: true)
         .get();
     return snap.docs.map((d) => Usuario.fromMap(d.data(), d.id)).toList();
   }
