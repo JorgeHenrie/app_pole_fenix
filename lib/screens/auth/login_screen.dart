@@ -38,10 +38,33 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (authProvider.estaAutenticado && authProvider.usuario != null) {
-      final destino = authProvider.usuario!.tipoUsuario == 'admin'
-          ? Routes.homeAdmin
-          : Routes.homeAluna;
-      Navigator.of(context).pushReplacementNamed(destino);
+      final usuario = authProvider.usuario!;
+      if (usuario.tipoUsuario == 'admin') {
+        Navigator.of(context).pushReplacementNamed(Routes.homeAdmin);
+        return;
+      }
+      // Verifica status do cadastro da aluna
+      if (usuario.statusCadastro == 'pendente') {
+        Navigator.of(context)
+            .pushReplacementNamed(Routes.aguardandoAprovacao);
+        return;
+      }
+      if (usuario.statusCadastro == 'rejeitado') {
+        await authProvider.logout();
+        if (!mounted) return;
+        final motivo = usuario.motivoRejeicao?.isNotEmpty == true
+            ? usuario.motivoRejeicao!
+            : 'Entre em contato com o estúdio.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cadastro rejeitado: $motivo'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return;
+      }
+      Navigator.of(context).pushReplacementNamed(Routes.homeAluna);
     }
   }
 

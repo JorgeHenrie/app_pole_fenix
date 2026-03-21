@@ -46,8 +46,11 @@ class _GerenciarAlunasScreenState extends State<GerenciarAlunasScreen> {
           .where('ativo', isEqualTo: true)
           .orderBy('nome')
           .get();
-      final alunas =
-          snap.docs.map((d) => Usuario.fromMap(d.data(), d.id)).toList();
+      // Inclui apenas alunas aprovadas (ou sem campo, para compatibilidade)
+      final alunas = snap.docs
+          .map((d) => Usuario.fromMap(d.data(), d.id))
+          .where((u) => u.statusCadastro == 'aprovado')
+          .toList();
       setState(() {
         _alunas = alunas;
         _alunasFiltradas = alunas;

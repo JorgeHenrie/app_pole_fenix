@@ -12,6 +12,12 @@ class Usuario {
   final String? fotoUrl;
   final DateTime? atualizadoEm;
 
+  // Campos de aprovação de cadastro
+  final String statusCadastro; // 'pendente', 'aprovado', 'rejeitado'
+  final DateTime? dataAprovacao;
+  final String? aprovadoPor; // ID do admin que aprovou/rejeitou
+  final String? motivoRejeicao;
+
   const Usuario({
     required this.id,
     required this.nome,
@@ -22,6 +28,10 @@ class Usuario {
     this.ativo = true,
     this.fotoUrl,
     this.atualizadoEm,
+    this.statusCadastro = 'aprovado',
+    this.dataAprovacao,
+    this.aprovadoPor,
+    this.motivoRejeicao,
   });
 
   factory Usuario.fromMap(Map<String, dynamic> mapa, String id) {
@@ -29,6 +39,13 @@ class Usuario {
       if (valor is Timestamp) return valor.toDate();
       if (valor is String) return DateTime.parse(valor);
       return DateTime.now();
+    }
+
+    DateTime? _parseDateTimeOptional(dynamic valor) {
+      if (valor == null) return null;
+      if (valor is Timestamp) return valor.toDate();
+      if (valor is String) return DateTime.parse(valor);
+      return null;
     }
 
     return Usuario(
@@ -43,9 +60,12 @@ class Usuario {
           _parseDateTime(mapa['dataCadastro'] ?? mapa['criadoEm']),
       ativo: mapa['ativo'] as bool? ?? true,
       fotoUrl: mapa['fotoUrl'] as String?,
-      atualizadoEm: mapa['atualizadoEm'] != null
-          ? _parseDateTime(mapa['atualizadoEm'])
-          : null,
+      atualizadoEm: _parseDateTimeOptional(mapa['atualizadoEm']),
+      // Defaults to 'aprovado' for backward compatibility with existing users
+      statusCadastro: mapa['statusCadastro'] as String? ?? 'aprovado',
+      dataAprovacao: _parseDateTimeOptional(mapa['dataAprovacao']),
+      aprovadoPor: mapa['aprovadoPor'] as String?,
+      motivoRejeicao: mapa['motivoRejeicao'] as String?,
     );
   }
 
@@ -64,6 +84,10 @@ class Usuario {
       'ativo': ativo,
       'fotoUrl': fotoUrl,
       'atualizadoEm': atualizadoEm?.toIso8601String(),
+      'statusCadastro': statusCadastro,
+      'dataAprovacao': dataAprovacao?.toIso8601String(),
+      'aprovadoPor': aprovadoPor,
+      'motivoRejeicao': motivoRejeicao,
     };
   }
 
@@ -75,6 +99,10 @@ class Usuario {
     bool? ativo,
     String? fotoUrl,
     DateTime? atualizadoEm,
+    String? statusCadastro,
+    DateTime? dataAprovacao,
+    String? aprovadoPor,
+    String? motivoRejeicao,
   }) {
     return Usuario(
       id: id,
@@ -86,6 +114,10 @@ class Usuario {
       ativo: ativo ?? this.ativo,
       fotoUrl: fotoUrl ?? this.fotoUrl,
       atualizadoEm: atualizadoEm ?? this.atualizadoEm,
+      statusCadastro: statusCadastro ?? this.statusCadastro,
+      dataAprovacao: dataAprovacao ?? this.dataAprovacao,
+      aprovadoPor: aprovadoPor ?? this.aprovadoPor,
+      motivoRejeicao: motivoRejeicao ?? this.motivoRejeicao,
     );
   }
 }

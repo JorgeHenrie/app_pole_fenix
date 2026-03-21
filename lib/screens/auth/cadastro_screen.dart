@@ -58,10 +58,15 @@ class _CadastroScreenState extends State<CadastroScreen> {
     if (!mounted) return;
 
     if (authProvider.estaAutenticado && authProvider.usuario != null) {
-      final destino = authProvider.usuario!.tipoUsuario == 'admin'
-          ? Routes.homeAdmin
-          : Routes.homeAluna;
-      Navigator.of(context).pushReplacementNamed(destino);
+      final usuario = authProvider.usuario!;
+      if (usuario.tipoUsuario == 'admin') {
+        Navigator.of(context).pushReplacementNamed(Routes.homeAdmin);
+      } else if (usuario.statusCadastro == 'pendente') {
+        Navigator.of(context)
+            .pushReplacementNamed(Routes.aguardandoAprovacao);
+      } else {
+        Navigator.of(context).pushReplacementNamed(Routes.homeAluna);
+      }
     }
   }
 

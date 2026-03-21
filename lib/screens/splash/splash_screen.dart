@@ -42,10 +42,20 @@ class _SplashScreenState extends State<SplashScreen> {
       if (!mounted) return;
 
       if (authProvider.usuario != null) {
-        final destino = authProvider.usuario!.tipoUsuario == 'admin'
-            ? Routes.homeAdmin
-            : Routes.homeAluna;
-        Navigator.of(context).pushReplacementNamed(destino);
+        final usuario = authProvider.usuario!;
+        if (usuario.tipoUsuario == 'admin') {
+          Navigator.of(context).pushReplacementNamed(Routes.homeAdmin);
+        } else if (usuario.statusCadastro == 'pendente') {
+          Navigator.of(context)
+              .pushReplacementNamed(Routes.aguardandoAprovacao);
+        } else if (usuario.statusCadastro == 'rejeitado') {
+          await authProvider.logout();
+          if (mounted) {
+            Navigator.of(context).pushReplacementNamed(Routes.login);
+          }
+        } else {
+          Navigator.of(context).pushReplacementNamed(Routes.homeAluna);
+        }
       } else {
         Navigator.of(context).pushReplacementNamed(Routes.login);
       }
