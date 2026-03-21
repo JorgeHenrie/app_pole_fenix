@@ -100,6 +100,9 @@ class AuthProvider extends ChangeNotifier {
           telefone: telefone,
           dataCadastro: DateTime.now(),
           ativo: true,
+          // Novas alunas ficam pendentes até aprovação do admin;
+          // administradores são aprovados automaticamente.
+          statusCadastro: tipoUsuario == 'aluna' ? 'pendente' : 'aprovado',
         );
         // Define _usuario antes de salvar para evitar race condition
         _usuario = novoUsuario;
@@ -136,6 +139,13 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _setCarregando(false);
     }
+  }
+
+  /// Recarrega os dados do usuário autenticado a partir do Firestore.
+  Future<void> recarregarUsuario() async {
+    final uid = _authService.usuarioAtual?.uid;
+    if (uid == null) return;
+    await _carregarDadosUsuario(uid);
   }
 
   /// Limpa a mensagem de erro atual.

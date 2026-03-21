@@ -7,6 +7,7 @@ import 'screens/splash/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/cadastro_screen.dart';
 import 'screens/auth/recuperar_senha_screen.dart';
+import 'screens/auth/aguardando_aprovacao_screen.dart';
 import 'screens/aluna/home_aluna_screen.dart';
 import 'screens/aluna/agendar_aula_screen.dart';
 import 'screens/aluna/minhas_aulas_screen.dart';
@@ -29,6 +30,7 @@ import 'screens/admin/aprovar_solicitacoes_screen.dart';
 import 'screens/admin/validar_atestados_screen.dart';
 import 'screens/admin/visualizar_ocupacao_screen.dart';
 import 'screens/admin/gerenciar_planos_screen.dart';
+import 'screens/admin/aprovar_cadastros_screen.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -45,6 +47,8 @@ class App extends StatelessWidget {
         Routes.login: (context) => const LoginScreen(),
         Routes.cadastro: (context) => const CadastroScreen(),
         Routes.recuperarSenha: (context) => const RecuperarSenhaScreen(),
+        Routes.aguardandoAprovacao: (context) =>
+            const AguardandoAprovacaoScreen(),
         Routes.homeAluna: (context) => const HomeAlunaScreen(),
         Routes.agendarAula: (context) => const AgendarAulaScreen(),
         Routes.minhasAulas: (context) => const MinhasAulasScreen(),
@@ -89,6 +93,7 @@ class App extends StatelessWidget {
         Routes.visualizarOcupacao: (context) =>
             const VisualizarOcupacaoScreen(),
         Routes.gerenciarPlanos: (context) => const GerenciarPlanosScreen(),
+        Routes.aprovarCadastros: (context) => const AprovarCadastrosScreen(),
       },
     );
   }

@@ -3,6 +3,7 @@ class Routes {
   static const String login = '/login';
   static const String cadastro = '/cadastro';
   static const String recuperarSenha = '/recuperar-senha';
+  static const String aguardandoAprovacao = '/aguardando-aprovacao';
   static const String homeAluna = '/home-aluna';
   static const String homeAdmin = '/home-admin';
   static const String agendarAula = '/agendar-aula';
@@ -18,6 +19,7 @@ class Routes {
   static const String meusHorarios = '/meus-horarios';
   static const String minhasReposicoes = '/minhas-reposicoes';
   static const String aprovarSolicitacoes = '/aprovar-solicitacoes';
+  static const String aprovarCadastros = '/admin/aprovar-cadastros';
   static const String validarAtestados = '/validar-atestados';
 
   // Contratação de plano
