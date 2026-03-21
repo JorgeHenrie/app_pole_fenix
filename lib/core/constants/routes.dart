@@ -28,4 +28,7 @@ class Routes {
 
   // Admin – ocupação
   static const String visualizarOcupacao = '/admin/visualizar-ocupacao';
+
+  // Admin – planos
+  static const String gerenciarPlanos = '/admin/gerenciar-planos';
 }

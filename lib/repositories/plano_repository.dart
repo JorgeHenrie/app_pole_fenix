@@ -25,11 +25,22 @@ class PlanoRepository {
     return _firestore.adicionar(colecao: _colecao, dados: plano.toMap());
   }
 
+  Future<List<Plano>> listarTodos() async {
+    final snapshot = await _firestore.colecao(_colecao).get();
+    return snapshot.docs
+        .map((doc) => Plano.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
   Future<void> atualizar(Plano plano) async {
     await _firestore.atualizar(
       colecao: _colecao,
       id: plano.id,
       dados: plano.toMap(),
     );
+  }
+
+  Future<void> deletar(String id) async {
+    await _firestore.remover(colecao: _colecao, id: id);
   }
 }

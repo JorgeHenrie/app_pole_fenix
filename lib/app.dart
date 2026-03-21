@@ -28,6 +28,7 @@ import 'screens/admin/eventos_admin_screen.dart';
 import 'screens/admin/aprovar_solicitacoes_screen.dart';
 import 'screens/admin/validar_atestados_screen.dart';
 import 'screens/admin/visualizar_ocupacao_screen.dart';
+import 'screens/admin/gerenciar_planos_screen.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -87,6 +88,7 @@ class App extends StatelessWidget {
         // Admin – ocupação
         Routes.visualizarOcupacao: (context) =>
             const VisualizarOcupacaoScreen(),
+        Routes.gerenciarPlanos: (context) => const GerenciarPlanosScreen(),
       },
     );
   }
