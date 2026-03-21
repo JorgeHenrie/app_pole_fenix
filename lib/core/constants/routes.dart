@@ -19,4 +19,13 @@ class Routes {
   static const String minhasReposicoes = '/minhas-reposicoes';
   static const String aprovarSolicitacoes = '/aprovar-solicitacoes';
   static const String validarAtestados = '/validar-atestados';
+
+  // Contratação de plano
+  static const String contratarPlano = '/contratar-plano';
+  static const String selecionarHorarios = '/selecionar-horarios';
+  static const String confirmarContratacao = '/confirmar-contratacao';
+  static const String sucessoContratacao = '/sucesso-contratacao';
+
+  // Admin – ocupação
+  static const String visualizarOcupacao = '/admin/visualizar-ocupacao';
 }

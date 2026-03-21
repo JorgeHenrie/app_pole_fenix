@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../providers/home_aluna_provider.dart';
 
 /// Grade de ações rápidas na tela inicial da aluna.
 class AcoesRapidasGrid extends StatelessWidget {
@@ -9,7 +11,17 @@ class AcoesRapidasGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final temPlano =
+        context.watch<HomeAlunaProvider>().assinatura != null;
+
     final acoes = [
+      if (!temPlano)
+        _AcaoRapida(
+          icone: Icons.add_card,
+          rotulo: 'Contratar Plano',
+          cor: AppColors.success,
+          rota: Routes.contratarPlano,
+        ),
       _AcaoRapida(
         icone: Icons.schedule,
         rotulo: 'Meus Horários',

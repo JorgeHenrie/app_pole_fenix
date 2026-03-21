@@ -53,6 +53,14 @@ class HomeAdminScreen extends StatelessWidget {
           ),
           _buildMenuCard(
             context,
+            icon: Icons.bar_chart,
+            title: 'Ocupação de Horários',
+            subtitle: 'Ver alunas inscritas em cada horário',
+            color: const Color(0xFF00695C),
+            rota: Routes.visualizarOcupacao,
+          ),
+          _buildMenuCard(
+            context,
             icon: Icons.swap_horiz,
             title: 'Aprovar Solicitações',
             subtitle: 'Aprovar mudanças de horário fixo',
