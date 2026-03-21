@@ -75,7 +75,7 @@ class PlanoStatusCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () =>
-                    Navigator.pushNamed(context, Routes.meuPlano),
+                    Navigator.pushNamed(context, Routes.contratarPlano),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: AppColors.primary,
@@ -83,7 +83,7 @@ class PlanoStatusCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                child: const Text('Ver planos disponíveis'),
+                child: const Text('Contratar Plano'),
               ),
             ),
           ],

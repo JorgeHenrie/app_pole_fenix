@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/assinatura.dart';
 import '../services/firebase/firestore_service.dart';
 
@@ -17,6 +19,14 @@ class AssinaturaRepository {
     if (snapshot.docs.isEmpty) return null;
     final doc = snapshot.docs.first;
     return Assinatura.fromMap(doc.data(), doc.id);
+  }
+
+  /// Cria uma nova assinatura com o id fornecido.
+  Future<void> criar(Assinatura assinatura) async {
+    await FirebaseFirestore.instance
+        .collection(_colecao)
+        .doc(assinatura.id)
+        .set(assinatura.toMap());
   }
 
   /// Salva ou atualiza os dados de uma assinatura.

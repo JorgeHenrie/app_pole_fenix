@@ -56,6 +56,16 @@ class HorarioFixoRepository {
     return snapshot.docs.length;
   }
 
+  Future<List<HorarioFixo>> buscarTodosAtivos() async {
+    final snapshot = await _firestore
+        .colecao(_colecao)
+        .where('ativo', isEqualTo: true)
+        .get();
+    return snapshot.docs
+        .map((doc) => HorarioFixo.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
   Future<List<HorarioFixo>> buscarPorDiaHorario(
     int diaSemana,
     String horario,

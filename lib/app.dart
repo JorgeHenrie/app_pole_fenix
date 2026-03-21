@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/routes.dart';
+import 'models/grade_horario.dart';
+import 'models/plano.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/cadastro_screen.dart';
@@ -13,6 +15,10 @@ import 'screens/aluna/eventos_screen.dart';
 import 'screens/aluna/perfil_screen.dart';
 import 'screens/aluna/meus_horarios_screen.dart';
 import 'screens/aluna/minhas_reposicoes_screen.dart';
+import 'screens/aluna/contratar_plano_screen.dart';
+import 'screens/aluna/selecionar_horarios_screen.dart';
+import 'screens/aluna/confirmar_contratacao_screen.dart';
+import 'screens/aluna/sucesso_contratacao_screen.dart';
 import 'screens/admin/home_admin_screen.dart';
 import 'screens/admin/gerenciar_horarios_screen.dart';
 import 'screens/admin/gerenciar_aulas_screen.dart';
@@ -21,6 +27,7 @@ import 'screens/admin/pagamentos_screen.dart';
 import 'screens/admin/eventos_admin_screen.dart';
 import 'screens/admin/aprovar_solicitacoes_screen.dart';
 import 'screens/admin/validar_atestados_screen.dart';
+import 'screens/admin/visualizar_ocupacao_screen.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -54,6 +61,32 @@ class App extends StatelessWidget {
         Routes.aprovarSolicitacoes: (context) =>
             const AprovarSolicitacoesScreen(),
         Routes.validarAtestados: (context) => const ValidarAtestadosScreen(),
+        // Contratação de plano
+        Routes.contratarPlano: (context) => const ContratarPlanoScreen(),
+        Routes.selecionarHorarios: (context) {
+          final plano =
+              ModalRoute.of(context)!.settings.arguments as Plano;
+          return SelecionarHorariosScreen(plano: plano);
+        },
+        Routes.confirmarContratacao: (context) {
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>;
+          return ConfirmarContratacaoScreen(
+            plano: args['plano'] as Plano,
+            horariosEscolhidos:
+                (args['horarios'] as List).cast<GradeHorario>(),
+          );
+        },
+        Routes.sucessoContratacao: (context) {
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>;
+          return SucessoContratacaoScreen(
+            horarios: (args['horarios'] as List).cast<GradeHorario>(),
+          );
+        },
+        // Admin – ocupação
+        Routes.visualizarOcupacao: (context) =>
+            const VisualizarOcupacaoScreen(),
       },
     );
   }
