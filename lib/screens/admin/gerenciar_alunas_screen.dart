@@ -44,13 +44,13 @@ class _GerenciarAlunasScreenState extends State<GerenciarAlunasScreen> {
           .collection('usuarios')
           .where('tipoUsuario', isEqualTo: 'aluna')
           .where('ativo', isEqualTo: true)
-          .orderBy('nome')
           .get();
       // Inclui apenas alunas aprovadas (ou sem campo, para compatibilidade)
       final alunas = snap.docs
           .map((d) => Usuario.fromMap(d.data(), d.id))
           .where((u) => u.statusCadastro == 'aprovado')
-          .toList();
+          .toList()
+        ..sort((a, b) => a.nome.compareTo(b.nome));
       setState(() {
         _alunas = alunas;
         _alunasFiltradas = alunas;
@@ -122,8 +122,7 @@ class _GerenciarAlunasScreenState extends State<GerenciarAlunasScreen> {
                     : RefreshIndicator(
                         onRefresh: _carregarAlunas,
                         child: ListView.builder(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: _alunasFiltradas.length,
                           itemBuilder: (context, index) => _AlunaCard(
                             aluna: _alunasFiltradas[index],
@@ -323,8 +322,7 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                         child: Column(
                           children: [
                             _InfoRow(
-                                'Status',
-                                _assinatura!.status.toUpperCase()),
+                                'Status', _assinatura!.status.toUpperCase()),
                             _InfoRow('Créditos',
                                 '${_assinatura!.creditosDisponiveis}'),
                             _InfoRow('Aulas realizadas',
@@ -356,13 +354,11 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                             leading: const Icon(Icons.schedule,
                                 color: AppColors.primary),
                             title: Text(h.diaSemanaTexto),
-                            subtitle:
-                                Text('${h.horario} • ${h.modalidade}'),
+                            subtitle: Text('${h.horario} • ${h.modalidade}'),
                             trailing: h.ativo
                                 ? const Icon(Icons.check_circle,
                                     color: Colors.green)
-                                : const Icon(Icons.cancel,
-                                    color: Colors.red),
+                                : const Icon(Icons.cancel, color: Colors.red),
                           ),
                         )),
                 ],
@@ -384,10 +380,8 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(color: AppColors.textSecondary)),
-          Text(value,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     );

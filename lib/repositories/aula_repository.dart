@@ -15,13 +15,14 @@ class AulaRepository {
     final agora = DateTime.now().toIso8601String();
     final snapshot = await _firestore
         .colecao(_colecao)
-        .where('status', isEqualTo: 'agendada')
         .where('dataHora', isGreaterThanOrEqualTo: agora)
-        .orderBy('dataHora')
         .get();
-    return snapshot.docs
+    final aulas = snapshot.docs
         .map((doc) => Aula.fromMap(doc.data(), doc.id))
-        .toList();
+        .where((a) => a.status == 'agendada')
+        .toList()
+      ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+    return aulas;
   }
 
   Future<List<Aula>> buscarProximasPorAluna(
@@ -32,14 +33,14 @@ class AulaRepository {
     final snapshot = await _firestore
         .colecao(_colecao)
         .where('alunaId', isEqualTo: alunaId)
-        .where('status', isEqualTo: 'agendada')
         .where('dataHora', isGreaterThanOrEqualTo: agora)
-        .orderBy('dataHora')
-        .limit(limite)
         .get();
-    return snapshot.docs
+    final aulas = snapshot.docs
         .map((doc) => Aula.fromMap(doc.data(), doc.id))
-        .toList();
+        .where((a) => a.status == 'agendada')
+        .toList()
+      ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+    return aulas.take(limite).toList();
   }
 
   Future<bool> aulaJaExiste(String horarioFixoId, DateTime dataHora) async {

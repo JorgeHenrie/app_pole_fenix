@@ -46,7 +46,8 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
   Future<void> _carregarProximasAulas(String alunaId) async {
     setState(() => _carregandoAulas = true);
     try {
-      final aulas = await _aulaRepository.buscarProximasPorAluna(alunaId, limite: 8);
+      final aulas =
+          await _aulaRepository.buscarProximasPorAluna(alunaId, limite: 8);
       setState(() => _proximasAulas = aulas);
     } catch (e) {
       // ignore
@@ -81,7 +82,7 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
                 children: [
                   _buildHorariosRecorrentes(provider),
                   const SizedBox(height: 24),
-                  _buildProximasAulas(),
+                  _buildProximasAulas(provider.horariosFixos),
                 ],
               ),
             ),
@@ -142,7 +143,8 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
     );
   }
 
-  Widget _buildProximasAulas() {
+  Widget _buildProximasAulas(List<HorarioFixo> horariosFixos) {
+    final ocorrencias = _gerarProximasOcorrencias(horariosFixos, semanas: 4);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -155,26 +157,32 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
         const SizedBox(height: 12),
         if (_carregandoAulas)
           const Center(child: CircularProgressIndicator())
-        else if (_proximasAulas.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Text(
-              'Nenhuma aula agendada nas próximas semanas.',
-              style: TextStyle(color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-          )
-        else
+        else ...[
           ..._proximasAulas.map((aula) => _AulaAgendadaCard(
                 aula: aula,
                 onCancelar: () => _mostrarCancelarAula(aula),
               )),
+          if (ocorrencias.isNotEmpty) ...[
+            if (_proximasAulas.isNotEmpty) const SizedBox(height: 4),
+            ...ocorrencias.map(
+              (o) => _OcorrenciaFixaCard(data: o.data, horario: o.horario),
+            ),
+          ] else if (_proximasAulas.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Text(
+                'Nenhuma aula agendada nas próximas semanas.',
+                style: TextStyle(color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -231,6 +239,52 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
   }
 }
 
+/// Gera as próximas [semanas] ocorrências para uma lista de horários fixos,
+/// ordenadas por data crescente.
+List<({DateTime data, HorarioFixo horario})> _gerarProximasOcorrencias(
+  List<HorarioFixo> horarios, {
+  int semanas = 4,
+}) {
+  final result = <({DateTime data, HorarioFixo horario})>[];
+  for (final h in horarios) {
+    DateTime proxima = _proximaOcorrencia(h.diaSemana, h.horario);
+    for (int i = 0; i < semanas; i++) {
+      result.add((data: proxima, horario: h));
+      proxima = proxima.add(const Duration(days: 7));
+    }
+  }
+  result.sort((a, b) => a.data.compareTo(b.data));
+  return result;
+}
+
+/// Calcula a próxima data de ocorrência de um horário fixo.
+/// Se hoje é o dia e o horário ainda não passou, retorna hoje.
+/// Caso contrário, retorna a próxima ocorrência na semana seguinte.
+DateTime _proximaOcorrencia(int diaSemana, String horario) {
+  final agora = DateTime.now();
+  final partes = horario.split(':');
+  final hora = int.parse(partes[0]);
+  final minuto = int.parse(partes[1]);
+
+  // quantos dias até o próximo diaSemana (0 = hoje)
+  final int diasAte = (diaSemana - agora.weekday) % 7;
+
+  DateTime candidato = DateTime(
+    agora.year,
+    agora.month,
+    agora.day + diasAte,
+    hora,
+    minuto,
+  );
+
+  // se o horário de hoje já passou, vai para a semana seguinte
+  if (candidato.isBefore(agora)) {
+    candidato = candidato.add(const Duration(days: 7));
+  }
+
+  return candidato;
+}
+
 class _HorarioFixoCard extends StatelessWidget {
   final HorarioFixo horario;
   final VoidCallback onSolicitarMudanca;
@@ -256,7 +310,8 @@ class _HorarioFixoCard extends StatelessWidget {
                 color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.schedule, color: AppColors.primary, size: 28),
+              child: const Icon(Icons.schedule,
+                  color: AppColors.primary, size: 28),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -270,7 +325,16 @@ class _HorarioFixoCard extends StatelessWidget {
                       fontSize: 16,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Próxima: ${DateFormatter.data(_proximaOcorrencia(horario.diaSemana, horario.horario))}',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
                   Text(
                     '${horario.horario} • ${horario.modalidade}',
                     style: const TextStyle(
@@ -284,6 +348,105 @@ class _HorarioFixoCard extends StatelessWidget {
             TextButton(
               onPressed: onSolicitarMudanca,
               child: const Text('Mudar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OcorrenciaFixaCard extends StatelessWidget {
+  final DateTime data;
+  final HorarioFixo horario;
+
+  const _OcorrenciaFixaCard({required this.data, required this.horario});
+
+  @override
+  Widget build(BuildContext context) {
+    final agora = DateTime.now();
+    final isHoje = data.year == agora.year &&
+        data.month == agora.month &&
+        data.day == agora.day;
+    final cor = isHoje ? AppColors.secondary : AppColors.primary;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: cor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    horario.horario,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: cor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isHoje
+                        ? 'HOJE'
+                        : '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: cor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    horario.modalidade,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${horario.diaSemanaTexto} • ${DateFormatter.data(data)}',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'agendada',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.success,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         ),
@@ -335,7 +498,9 @@ class _AulaAgendadaCard extends StatelessWidget {
                     isHoje ? 'HOJE' : DateFormatter.data(aula.dataHora),
                     style: TextStyle(
                       fontSize: 9,
-                      color: isHoje ? AppColors.secondary : AppColors.textSecondary,
+                      color: isHoje
+                          ? AppColors.secondary
+                          : AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
                     ),
                     textAlign: TextAlign.center,
@@ -609,11 +774,8 @@ class _SolicitarMudancaDialogState extends State<_SolicitarMudancaDialog> {
       7: 'Domingo',
     };
 
-    final diasComHorarios = _horariosDisponiveis
-        .map((h) => h.diaSemana)
-        .toSet()
-        .toList()
-      ..sort();
+    final diasComHorarios =
+        _horariosDisponiveis.map((h) => h.diaSemana).toSet().toList()..sort();
 
     final horariosParaDia = _novoDiaSemana != null
         ? _horariosDisponiveis
@@ -688,42 +850,42 @@ class _SolicitarMudancaDialogState extends State<_SolicitarMudancaDialog> {
           child: const Text('Cancelar'),
         ),
         ElevatedButton(
-          onPressed:
-              (_novoDiaSemana == null || _novoHorario == null || _processando)
-                  ? null
-                  : () async {
-                      setState(() => _processando = true);
-                      try {
-                        final usuario =
-                            context.read<AuthProvider>().usuario;
-                        if (usuario != null) {
-                          final solicitacao = SolicitacaoMudancaHorario(
-                            id: '',
-                            alunaId: usuario.id,
-                            horarioFixoAntigoId: widget.horarioAtual.id,
-                            novoDiaSemana: _novoDiaSemana!,
-                            novoHorario: _novoHorario!,
-                            motivo: _motivoController.text,
-                            status: 'pendente',
-                            solicitadoEm: DateTime.now(),
-                          );
-                          await SolicitacaoMudancaHorarioRepository()
-                              .criar(solicitacao);
-                        }
-                        if (mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'Solicitação enviada! Aguarde aprovação.'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        setState(() => _processando = false);
-                      }
-                    },
+          onPressed: (_novoDiaSemana == null ||
+                  _novoHorario == null ||
+                  _processando)
+              ? null
+              : () async {
+                  setState(() => _processando = true);
+                  try {
+                    final usuario = context.read<AuthProvider>().usuario;
+                    if (usuario != null) {
+                      final solicitacao = SolicitacaoMudancaHorario(
+                        id: '',
+                        alunaId: usuario.id,
+                        horarioFixoAntigoId: widget.horarioAtual.id,
+                        novoDiaSemana: _novoDiaSemana!,
+                        novoHorario: _novoHorario!,
+                        motivo: _motivoController.text,
+                        status: 'pendente',
+                        solicitadoEm: DateTime.now(),
+                      );
+                      await SolicitacaoMudancaHorarioRepository()
+                          .criar(solicitacao);
+                    }
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text('Solicitação enviada! Aguarde aprovação.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    setState(() => _processando = false);
+                  }
+                },
           child: _processando
               ? const SizedBox(
                   width: 16,

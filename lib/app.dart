@@ -9,6 +9,7 @@ import 'screens/auth/cadastro_screen.dart';
 import 'screens/auth/recuperar_senha_screen.dart';
 import 'screens/auth/aguardando_aprovacao_screen.dart';
 import 'screens/aluna/home_aluna_screen.dart';
+import 'screens/aluna/notificacoes_screen.dart';
 import 'screens/aluna/agendar_aula_screen.dart';
 import 'screens/aluna/minhas_aulas_screen.dart';
 import 'screens/aluna/meu_plano_screen.dart';
@@ -69,8 +70,7 @@ class App extends StatelessWidget {
         // Contratação de plano
         Routes.contratarPlano: (context) => const ContratarPlanoScreen(),
         Routes.selecionarHorarios: (context) {
-          final plano =
-              ModalRoute.of(context)!.settings.arguments as Plano;
+          final plano = ModalRoute.of(context)!.settings.arguments as Plano;
           return SelecionarHorariosScreen(plano: plano);
         },
         Routes.confirmarContratacao: (context) {
@@ -78,8 +78,7 @@ class App extends StatelessWidget {
               as Map<String, dynamic>;
           return ConfirmarContratacaoScreen(
             plano: args['plano'] as Plano,
-            horariosEscolhidos:
-                (args['horarios'] as List).cast<GradeHorario>(),
+            horariosEscolhidos: (args['horarios'] as List).cast<GradeHorario>(),
           );
         },
         Routes.sucessoContratacao: (context) {
@@ -94,6 +93,7 @@ class App extends StatelessWidget {
             const VisualizarOcupacaoScreen(),
         Routes.gerenciarPlanos: (context) => const GerenciarPlanosScreen(),
         Routes.aprovarCadastros: (context) => const AprovarCadastrosScreen(),
+        Routes.notificacoes: (context) => const NotificacoesScreen(),
       },
     );
   }

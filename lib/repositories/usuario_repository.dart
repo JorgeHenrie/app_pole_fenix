@@ -49,17 +49,14 @@ class UsuarioRepository {
         .collection(_colecao)
         .where('tipoUsuario', isEqualTo: 'aluna')
         .where('statusCadastro', isEqualTo: 'pendente')
-        .orderBy('criadoEm', descending: true)
+        .orderBy('dataCadastro', descending: true)
         .get();
     return snap.docs.map((d) => Usuario.fromMap(d.data(), d.id)).toList();
   }
 
   /// Aprova o cadastro de uma aluna.
   Future<void> aprovar(String alunaId, String adminId) async {
-    await FirebaseFirestore.instance
-        .collection(_colecao)
-        .doc(alunaId)
-        .update({
+    await FirebaseFirestore.instance.collection(_colecao).doc(alunaId).update({
       'statusCadastro': 'aprovado',
       'dataAprovacao': DateTime.now().toIso8601String(),
       'aprovadoPor': adminId,
@@ -68,12 +65,8 @@ class UsuarioRepository {
   }
 
   /// Rejeita o cadastro de uma aluna com motivo opcional.
-  Future<void> rejeitar(
-      String alunaId, String adminId, String? motivo) async {
-    await FirebaseFirestore.instance
-        .collection(_colecao)
-        .doc(alunaId)
-        .update({
+  Future<void> rejeitar(String alunaId, String adminId, String? motivo) async {
+    await FirebaseFirestore.instance.collection(_colecao).doc(alunaId).update({
       'statusCadastro': 'rejeitado',
       'dataAprovacao': DateTime.now().toIso8601String(),
       'aprovadoPor': adminId,

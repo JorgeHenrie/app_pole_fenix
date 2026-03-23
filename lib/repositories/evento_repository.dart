@@ -11,11 +11,12 @@ class EventoRepository {
     final snapshot = await _firestore
         .colecao(_colecao)
         .where('publicado', isEqualTo: true)
-        .orderBy('dataHora')
         .get();
-    return snapshot.docs
+    final eventos = snapshot.docs
         .map((doc) => Evento.fromMap(doc.data(), doc.id))
-        .toList();
+        .toList()
+      ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+    return eventos;
   }
 
   /// Cria um novo evento e retorna seu id.

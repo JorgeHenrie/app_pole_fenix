@@ -33,4 +33,7 @@ class Routes {
 
   // Admin – planos
   static const String gerenciarPlanos = '/admin/gerenciar-planos';
+
+  // Notificações
+  static const String notificacoes = '/notificacoes';
 }

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/helpers.dart';
 import '../../models/grade_horario.dart';
+import '../../models/usuario.dart';
 import '../../repositories/grade_horario_repository.dart';
 import '../../repositories/horario_fixo_repository.dart';
+import '../../repositories/usuario_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 class GerenciarHorariosScreen extends StatefulWidget {
@@ -66,10 +69,7 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final diasComHorarios = _grade
-        .map((g) => g.diaSemana)
-        .toSet()
-        .toList()
+    final diasComHorarios = _grade.map((g) => g.diaSemana).toSet().toList()
       ..sort();
 
     return Scaffold(
@@ -107,6 +107,7 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
                           _carregarDados();
                         },
                         onEdit: (g) => _mostrarEdicao(g),
+                        onVerAlunas: (g) => _mostrarAlunas(g),
                       );
                     },
                   ),
@@ -165,6 +166,23 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
       ),
     );
   }
+
+  Future<void> _mostrarAlunas(GradeHorario grade) async {
+    final diasNome = _diasSemana[grade.diaSemana] ?? 'Dia ${grade.diaSemana}';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _AlunasSlotSheet(
+        titulo: '$diasNome • ${grade.horario}',
+        subtitulo: grade.modalidade,
+        diaSemana: grade.diaSemana,
+        horario: grade.horario,
+      ),
+    );
+  }
 }
 
 class _DiaSection extends StatelessWidget {
@@ -173,6 +191,7 @@ class _DiaSection extends StatelessWidget {
   final Map<String, int> ocupacao;
   final Function(GradeHorario) onToggle;
   final Function(GradeHorario) onEdit;
+  final Function(GradeHorario) onVerAlunas;
 
   const _DiaSection({
     required this.dia,
@@ -180,6 +199,7 @@ class _DiaSection extends StatelessWidget {
     required this.ocupacao,
     required this.onToggle,
     required this.onEdit,
+    required this.onVerAlunas,
   });
 
   @override
@@ -202,6 +222,7 @@ class _DiaSection extends StatelessWidget {
               vagas: ocupacao['${h.diaSemana}_${h.horario}'] ?? 0,
               onToggle: () => onToggle(h),
               onEdit: () => onEdit(h),
+              onVerAlunas: () => onVerAlunas(h),
             )),
         const SizedBox(height: 8),
       ],
@@ -214,12 +235,14 @@ class _HorarioSlotCard extends StatelessWidget {
   final int vagas;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
+  final VoidCallback onVerAlunas;
 
   const _HorarioSlotCard({
     required this.grade,
     required this.vagas,
     required this.onToggle,
     required this.onEdit,
+    required this.onVerAlunas,
   });
 
   @override
@@ -243,6 +266,7 @@ class _HorarioSlotCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
+        onTap: onVerAlunas,
         leading: Container(
           width: 48,
           height: 48,
@@ -276,6 +300,14 @@ class _HorarioSlotCard extends StatelessWidget {
             PopupMenuButton(
               itemBuilder: (ctx) => [
                 PopupMenuItem(
+                  onTap: onVerAlunas,
+                  child: const ListTile(
+                    leading: Icon(Icons.group_outlined),
+                    title: Text('Ver alunas'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
                   onTap: onEdit,
                   child: const ListTile(
                     leading: Icon(Icons.edit),
@@ -287,9 +319,7 @@ class _HorarioSlotCard extends StatelessWidget {
                   onTap: onToggle,
                   child: ListTile(
                     leading: Icon(
-                      grade.ativo
-                          ? Icons.visibility_off
-                          : Icons.visibility,
+                      grade.ativo ? Icons.visibility_off : Icons.visibility,
                     ),
                     title: Text(grade.ativo ? 'Desativar' : 'Ativar'),
                     contentPadding: EdgeInsets.zero,
@@ -300,6 +330,224 @@ class _HorarioSlotCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AlunasSlotSheet extends StatefulWidget {
+  final String titulo;
+  final String subtitulo;
+  final int diaSemana;
+  final String horario;
+
+  const _AlunasSlotSheet({
+    required this.titulo,
+    required this.subtitulo,
+    required this.diaSemana,
+    required this.horario,
+  });
+
+  @override
+  State<_AlunasSlotSheet> createState() => _AlunasSlotSheetState();
+}
+
+class _AlunasSlotSheetState extends State<_AlunasSlotSheet> {
+  final HorarioFixoRepository _horarioRepo = HorarioFixoRepository();
+  final UsuarioRepository _usuarioRepo = UsuarioRepository();
+
+  // Par (aluna, horarioFixoId) para poder desativar o vínculo
+  List<({Usuario aluna, String horarioFixoId})> _entradas = [];
+  bool _carregando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregar();
+  }
+
+  Future<void> _carregar() async {
+    if (mounted) setState(() => _carregando = true);
+    try {
+      final horarios = await _horarioRepo.buscarPorDiaHorario(
+        widget.diaSemana,
+        widget.horario,
+      );
+      final entradas = <({Usuario aluna, String horarioFixoId})>[];
+      for (final h in horarios) {
+        final aluna = await _usuarioRepo.buscarPorId(h.alunaId);
+        if (aluna != null) entradas.add((aluna: aluna, horarioFixoId: h.id));
+      }
+      if (mounted) setState(() => _entradas = entradas);
+    } catch (_) {
+      // ignora erro silenciosamente
+    } finally {
+      if (mounted) setState(() => _carregando = false);
+    }
+  }
+
+  Future<void> _confirmarRemocao(
+      BuildContext context, Usuario aluna, String horarioFixoId) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover aluna'),
+        content: Text(
+          'Deseja remover ${aluna.nome} deste horário?\nO horário fixo dela será desativado.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      await _horarioRepo.desativar(
+          horarioFixoId, 'Removido pelo administrador');
+      await _carregar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${aluna.nome} removida deste horário.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      builder: (ctx, scrollController) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 16),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                widget.titulo,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                widget.subtitulo,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (_carregando)
+                const Expanded(
+                    child: Center(child: CircularProgressIndicator()))
+              else if (_entradas.isEmpty)
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.group_off_outlined,
+                            size: 56, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Nenhuma aluna cadastrada neste horário',
+                          style: TextStyle(color: Colors.grey.shade600),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else ...[
+                Text(
+                  '${_entradas.length} ${_entradas.length == 1 ? 'aluna' : 'alunas'}',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    itemCount: _entradas.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final aluna = _entradas[i].aluna;
+                      final horarioFixoId = _entradas[i].horarioFixoId;
+                      final iniciais = Helpers.iniciais(aluna.nome);
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                        leading: CircleAvatar(
+                          backgroundColor: AppColors.primary,
+                          backgroundImage: aluna.fotoUrl != null
+                              ? NetworkImage(aluna.fotoUrl!)
+                              : null,
+                          child: aluna.fotoUrl == null
+                              ? Text(
+                                  iniciais,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        title: Text(
+                          aluna.nome,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: aluna.telefone != null
+                            ? Text(aluna.telefone!)
+                            : Text(
+                                aluna.email,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.person_remove_outlined,
+                              color: AppColors.error),
+                          tooltip: 'Remover aluna',
+                          onPressed: () =>
+                              _confirmarRemocao(context, aluna, horarioFixoId),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -440,8 +688,7 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
                     capacidadeMaxima: _capacidade,
                     modalidade: _modalidadeController.text.trim(),
                     ativo: widget.gradeExistente?.ativo ?? true,
-                    criadoEm:
-                        widget.gradeExistente?.criadoEm ?? DateTime.now(),
+                    criadoEm: widget.gradeExistente?.criadoEm ?? DateTime.now(),
                   );
                   await widget.onSalvar(grade);
                   if (mounted) Navigator.pop(context);

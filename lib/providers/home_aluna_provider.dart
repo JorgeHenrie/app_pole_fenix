@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
@@ -8,11 +6,13 @@ import '../models/aula.dart';
 import '../models/evento.dart';
 import '../models/plano.dart';
 import '../repositories/assinatura_repository.dart';
+import '../repositories/aula_repository.dart';
 import '../repositories/evento_repository.dart';
 
 /// Provider responsável pelos dados da tela inicial da aluna.
 class HomeAlunaProvider extends ChangeNotifier {
   final AssinaturaRepository _assinaturaRepository = AssinaturaRepository();
+  final AulaRepository _aulaRepository = AulaRepository();
   final EventoRepository _eventoRepository = EventoRepository();
 
   Assinatura? _assinatura;
@@ -68,44 +68,10 @@ class HomeAlunaProvider extends ChangeNotifier {
 
   Future<void> _carregarProximasAulas(String alunaId) async {
     try {
-      final matriculasSnap = await FirebaseFirestore.instance
-          .collection('matriculas')
-          .where('alunaId', isEqualTo: alunaId)
-          .where('status', isEqualTo: 'confirmada')
-          .get();
-
-      if (matriculasSnap.docs.isEmpty) {
-        _proximasAulas = [];
-        return;
-      }
-
-      final aulaIds = matriculasSnap.docs
-          .map((d) => d.data()['aulaId'] as String)
-          .toSet()
-          .toList();
-
-      final agora = DateTime.now();
-      final List<Aula> aulas = [];
-
-      // Consultas em lotes de 10: Firestore limita whereIn a 10 valores por query
-      for (int i = 0; i < aulaIds.length; i += 10) {
-        final lote = aulaIds.sublist(i, min(i + 10, aulaIds.length));
-        final aulasSnap = await FirebaseFirestore.instance
-            .collection('aulas')
-            .where(FieldPath.documentId, whereIn: lote)
-            .where('status', isEqualTo: 'agendada')
-            .get();
-
-        for (final doc in aulasSnap.docs) {
-          final aula = Aula.fromMap(doc.data(), doc.id);
-          if (aula.dataHora.isAfter(agora)) {
-            aulas.add(aula);
-          }
-        }
-      }
-
-      aulas.sort((a, b) => a.dataHora.compareTo(b.dataHora));
-      _proximasAulas = aulas.take(3).toList();
+      _proximasAulas = await _aulaRepository.buscarProximasPorAluna(
+        alunaId,
+        limite: 3,
+      );
     } catch (e) {
       debugPrint('HomeAlunaProvider._carregarProximasAulas erro: $e');
       _proximasAulas = [];
