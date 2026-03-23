@@ -29,7 +29,7 @@ class ProximasAulasSection extends StatelessWidget {
               ),
               TextButton(
                 onPressed: () =>
-                    Navigator.pushNamed(context, Routes.minhasAulas),
+                    Navigator.pushNamed(context, Routes.meusHorarios),
                 child: const Text('Ver todas'),
               ),
             ],

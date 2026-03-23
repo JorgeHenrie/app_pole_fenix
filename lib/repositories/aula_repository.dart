@@ -53,6 +53,18 @@ class AulaRepository {
     return snapshot.docs.isNotEmpty;
   }
 
+  Future<List<Aula>> buscarHistoricoPorAluna(String alunaId) async {
+    final snapshot = await _firestore
+        .colecao(_colecao)
+        .where('alunaId', isEqualTo: alunaId)
+        .get();
+    final aulas = snapshot.docs
+        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .toList()
+      ..sort((a, b) => b.dataHora.compareTo(a.dataHora));
+    return aulas;
+  }
+
   Future<List<Aula>> buscarPorHorarioFixo(String horarioFixoId) async {
     final snapshot = await _firestore
         .colecao(_colecao)
