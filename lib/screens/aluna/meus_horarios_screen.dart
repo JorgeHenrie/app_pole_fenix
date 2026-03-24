@@ -144,7 +144,6 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
   }
 
   Widget _buildProximasAulas(List<HorarioFixo> horariosFixos) {
-    final ocorrencias = _gerarProximasOcorrencias(horariosFixos, semanas: 4);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -157,32 +156,26 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
         const SizedBox(height: 12),
         if (_carregandoAulas)
           const Center(child: CircularProgressIndicator())
-        else ...[
+        else if (_proximasAulas.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Text(
+              'Nenhuma aula agendada nas próximas semanas.',
+              style: TextStyle(color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          )
+        else
           ..._proximasAulas.map((aula) => _AulaAgendadaCard(
                 aula: aula,
                 onCancelar: () => _mostrarCancelarAula(aula),
               )),
-          if (ocorrencias.isNotEmpty) ...[
-            if (_proximasAulas.isNotEmpty) const SizedBox(height: 4),
-            ...ocorrencias.map(
-              (o) => _OcorrenciaFixaCard(data: o.data, horario: o.horario),
-            ),
-          ] else if (_proximasAulas.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Text(
-                'Nenhuma aula agendada nas próximas semanas.',
-                style: TextStyle(color: Colors.grey.shade600),
-                textAlign: TextAlign.center,
-              ),
-            ),
-        ],
       ],
     );
   }

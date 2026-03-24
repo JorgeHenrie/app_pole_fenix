@@ -29,15 +29,16 @@ class AulaRepository {
     String alunaId, {
     int limite = 3,
   }) async {
-    final agora = DateTime.now().toIso8601String();
+    final agora = DateTime.now();
+    // Filtramos a data em Dart para evitar incompatibilidade de tipos
+    // entre String ISO e Timestamp no Firestore.
     final snapshot = await _firestore
         .colecao(_colecao)
         .where('alunaId', isEqualTo: alunaId)
-        .where('dataHora', isGreaterThanOrEqualTo: agora)
         .get();
     final aulas = snapshot.docs
         .map((doc) => Aula.fromMap(doc.data(), doc.id))
-        .where((a) => a.status == 'agendada')
+        .where((a) => a.status == 'agendada' && a.dataHora.isAfter(agora))
         .toList()
       ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
     return aulas.take(limite).toList();
@@ -51,6 +52,18 @@ class AulaRepository {
         .limit(1)
         .get();
     return snapshot.docs.isNotEmpty;
+  }
+
+  Future<List<Aula>> buscarHistoricoPorAluna(String alunaId) async {
+    final snapshot = await _firestore
+        .colecao(_colecao)
+        .where('alunaId', isEqualTo: alunaId)
+        .get();
+    final aulas = snapshot.docs
+        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .toList()
+      ..sort((a, b) => b.dataHora.compareTo(a.dataHora));
+    return aulas;
   }
 
   Future<List<Aula>> buscarPorHorarioFixo(String horarioFixoId) async {

@@ -29,7 +29,7 @@ class ProximasAulasSection extends StatelessWidget {
               ),
               TextButton(
                 onPressed: () =>
-                    Navigator.pushNamed(context, Routes.minhasAulas),
+                    Navigator.pushNamed(context, Routes.meusHorarios),
                 child: const Text('Ver todas'),
               ),
             ],
@@ -38,7 +38,12 @@ class ProximasAulasSection extends StatelessWidget {
           if (aulas.isEmpty)
             _buildEmptyState(context)
           else
-            ...aulas.map((aula) => _AulaItemCard(aula: aula)),
+            ...aulas.asMap().entries.map(
+                  (e) => _AulaItemCard(
+                    aula: e.value,
+                    isFirst: e.key == 0,
+                  ),
+                ),
         ],
       ),
     );
@@ -55,7 +60,8 @@ class ProximasAulasSection extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.event_busy_outlined, size: 48, color: Colors.grey.shade400),
+          Icon(Icons.event_busy_outlined,
+              size: 48, color: Colors.grey.shade400),
           const SizedBox(height: 12),
           Text(
             'Você não tem aulas agendadas',
@@ -65,8 +71,7 @@ class ProximasAulasSection extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: () =>
-                Navigator.pushNamed(context, Routes.meusHorarios),
+            onPressed: () => Navigator.pushNamed(context, Routes.meusHorarios),
             icon: const Icon(Icons.schedule, size: 18),
             label: const Text('Meus Horários'),
           ),
@@ -78,8 +83,9 @@ class ProximasAulasSection extends StatelessWidget {
 
 class _AulaItemCard extends StatelessWidget {
   final Aula aula;
+  final bool isFirst;
 
-  const _AulaItemCard({required this.aula});
+  const _AulaItemCard({required this.aula, this.isFirst = false});
 
   @override
   Widget build(BuildContext context) {
@@ -87,42 +93,187 @@ class _AulaItemCard extends StatelessWidget {
     final isAmanha = _isAmanha(aula.dataHora);
 
     String diaLabel;
-    Color diaColor;
+    Color corAccent;
+
     if (isHoje) {
       diaLabel = 'HOJE';
-      diaColor = AppColors.secondary;
+      corAccent = AppColors.secondary;
     } else if (isAmanha) {
       diaLabel = 'AMANHÃ';
-      diaColor = AppColors.primary;
+      corAccent = AppColors.primary;
     } else {
-      diaLabel = DateFormatter.data(aula.dataHora);
-      diaColor = AppColors.textSecondary;
+      diaLabel = _diaSemana(aula.dataHora).toUpperCase();
+      corAccent = AppColors.textSecondary;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
+    if (isFirst && isHoje) {
+      // Card destacado para a próxima aula de hoje
+      return _buildCardDestaque(context, diaLabel, corAccent);
+    }
+    return _buildCardPadrao(context, diaLabel, corAccent);
+  }
+
+  Widget _buildCardDestaque(
+      BuildContext context, String diaLabel, Color corAccent) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primaryLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            // Coluna de data/hora
+            // Coluna de data
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 52,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        DateFormatter.hora(aula.dataHora),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        diaLabel,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'PRÓXIMA AULA',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    aula.titulo ?? aula.modalidade,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (aula.instrutora != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline,
+                            size: 13, color: Colors.white70),
+                        const SizedBox(width: 4),
+                        Text(
+                          aula.instrutora!,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (aula.duracaoMinutos != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(Icons.timer_outlined,
+                            size: 13, color: Colors.white70),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${aula.duracaoMinutos} min',
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardPadrao(
+      BuildContext context, String diaLabel, Color corAccent) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      elevation: 1.5,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            // Dia/Hora
             Container(
               width: 56,
               padding: const EdgeInsets.symmetric(vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: corAccent.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 children: [
                   Text(
                     DateFormatter.hora(aula.dataHora),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
-                      color: AppColors.primary,
+                      color: corAccent == AppColors.textSecondary
+                          ? AppColors.primary
+                          : corAccent,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -131,18 +282,26 @@ class _AulaItemCard extends StatelessWidget {
                     diaLabel,
                     style: TextStyle(
                       fontSize: 9,
-                      color: diaColor,
+                      color: corAccent,
                       fontWeight: FontWeight.w600,
                     ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 2),
+                  Text(
+                    DateFormatter.data(aula.dataHora).substring(0, 5),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: AppColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            // Informações da aula
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,7 +333,7 @@ class _AulaItemCard extends StatelessWidget {
                     ),
                   ],
                   if (aula.duracaoMinutos != null) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Row(
                       children: [
                         const Icon(Icons.timer_outlined,
@@ -193,28 +352,23 @@ class _AulaItemCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Badge de status
-            _buildStatusBadge(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Text(
+                'Confirmada',
+                style: TextStyle(
+                  color: Colors.green.shade700,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.green.shade50,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.shade200),
-      ),
-      child: Text(
-        'Confirmada',
-        style: TextStyle(
-          color: Colors.green.shade700,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -232,5 +386,18 @@ class _AulaItemCard extends StatelessWidget {
     return data.year == amanha.year &&
         data.month == amanha.month &&
         data.day == amanha.day;
+  }
+
+  String _diaSemana(DateTime data) {
+    const dias = [
+      'Segunda',
+      'Terça',
+      'Quarta',
+      'Quinta',
+      'Sexta',
+      'Sábado',
+      'Domingo',
+    ];
+    return dias[data.weekday - 1];
   }
 }
