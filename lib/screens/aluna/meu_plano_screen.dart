@@ -48,14 +48,13 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
           pw.Center(
             child: pw.Text(
               'CONTRATO DE PRESTAÇÃO DE SERVIÇOS',
-              style: pw.TextStyle(
-                  fontSize: 16, fontWeight: pw.FontWeight.bold),
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
           ),
           pw.SizedBox(height: 6),
           pw.Center(
-            child: pw.Text('Fênix Pole Dance',
-                style: pw.TextStyle(fontSize: 13)),
+            child:
+                pw.Text('Fênix Pole Dance', style: pw.TextStyle(fontSize: 13)),
           ),
           pw.Divider(),
           pw.SizedBox(height: 16),
@@ -69,8 +68,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
           pw.SizedBox(height: 6),
           pw.Text('Plano: ${plano.nome}'),
           pw.Text('Descrição: ${plano.descricao}'),
-          pw.Text(
-              'Valor Mensal: ${currencyFormat.format(plano.preco)}'),
+          pw.Text('Valor Mensal: ${currencyFormat.format(plano.preco)}'),
           pw.Text('Aulas por mês: ${plano.aulasPorMes} aulas'),
           pw.Text('Aulas por semana: ${plano.aulasSemanais} aula(s)'),
           pw.SizedBox(height: 16),
@@ -78,8 +76,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 6),
           pw.Text('Início: ${DateFormatter.data(assinatura.dataInicio)}'),
-          pw.Text(
-              'Renovação: ${DateFormatter.data(assinatura.dataRenovacao)}'),
+          pw.Text('Renovação: ${DateFormatter.data(assinatura.dataRenovacao)}'),
           pw.Text('Status: ${assinatura.status.toUpperCase()}'),
           pw.SizedBox(height: 20),
           pw.Text('CLÁUSULAS CONTRATUAIS',
@@ -103,15 +100,13 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
           pw.SizedBox(height: 32),
           pw.Text(
             'Gerado em: ${DateFormatter.data(DateTime.now())}',
-            style: pw.TextStyle(
-                fontSize: 10, color: PdfColors.grey),
+            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey),
           ),
         ],
       ),
     );
 
-    await Printing.layoutPdf(
-        onLayout: (_) async => doc.save());
+    await Printing.layoutPdf(onLayout: (_) async => doc.save());
   }
 
   void _mostrarTermoAceite() {
@@ -150,8 +145,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
             return _buildSemPlano();
           }
 
-          final nomeAluna =
-              authProvider.usuario?.nome ?? 'Aluna';
+          final nomeAluna = authProvider.usuario?.nome ?? 'Aluna';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -229,16 +223,14 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white24,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  ativa
-                      ? 'ATIVO'
-                      : assinatura.status.toUpperCase(),
+                  ativa ? 'ATIVO' : assinatura.status.toUpperCase(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -269,8 +261,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
 
   Widget _buildDetalhesCard(Assinatura assinatura, Plano plano) {
     return Card(
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 1.5,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -290,8 +281,8 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
                 '${plano.aulasSemanais} aula(s)'),
             _buildDetalheItem(Icons.stars_outlined, 'Créditos disponíveis',
                 '${assinatura.creditosDisponiveis}'),
-            _buildDetalheItem(Icons.check_circle_outline,
-                'Aulas realizadas', '${assinatura.aulasRealizadas}'),
+            _buildDetalheItem(Icons.check_circle_outline, 'Aulas realizadas',
+                '${assinatura.aulasRealizadas}'),
             _buildDetalheItem(Icons.event, 'Início',
                 DateFormatter.data(assinatura.dataInicio)),
             _buildDetalheItem(Icons.autorenew, 'Próxima renovação',
@@ -302,8 +293,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
     );
   }
 
-  Widget _buildDetalheItem(
-      IconData icone, String label, String valor) {
+  Widget _buildDetalheItem(IconData icone, String label, String valor) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -312,19 +302,15 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(label,
-                style: const TextStyle(
-                    color: AppColors.textSecondary)),
+                style: const TextStyle(color: AppColors.textSecondary)),
           ),
-          Text(valor,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w600)),
+          Text(valor, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  Widget _buildAcoes(
-      Assinatura assinatura, Plano plano, String nomeAluna) {
+  Widget _buildAcoes(Assinatura assinatura, Plano plano, String nomeAluna) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -336,16 +322,15 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () =>
-              _baixarContrato(assinatura, plano, nomeAluna),
+          onPressed: () => _baixarContrato(assinatura, plano, nomeAluna),
           icon: const Icon(Icons.picture_as_pdf),
           label: const Text('Baixar Contrato (PDF)'),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 14),
             side: const BorderSide(color: AppColors.primary),
             foregroundColor: AppColors.primary,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
         const SizedBox(height: 12),
@@ -357,8 +342,8 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
             padding: const EdgeInsets.symmetric(vertical: 14),
             side: const BorderSide(color: AppColors.secondary),
             foregroundColor: AppColors.secondary,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),
       ],
@@ -456,8 +441,7 @@ class _TermoAceiteContent extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.primary.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.2)),
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
@@ -468,8 +452,8 @@ class _TermoAceiteContent extends StatelessWidget {
                 child: Text(
                   'Ao contratar o plano, a aluna declara ter lido e '
                   'aceito todos os termos acima.',
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.primary),
+                  style:
+                      const TextStyle(fontSize: 13, color: AppColors.primary),
                 ),
               ),
             ],
@@ -480,8 +464,7 @@ class _TermoAceiteContent extends StatelessWidget {
     );
   }
 
-  Widget _buildSecao(
-      BuildContext context, String titulo, String conteudo) {
+  Widget _buildSecao(BuildContext context, String titulo, String conteudo) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Column(
@@ -496,8 +479,7 @@ class _TermoAceiteContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(conteudo,
-              style: const TextStyle(height: 1.6, fontSize: 14)),
+          Text(conteudo, style: const TextStyle(height: 1.6, fontSize: 14)),
         ],
       ),
     );

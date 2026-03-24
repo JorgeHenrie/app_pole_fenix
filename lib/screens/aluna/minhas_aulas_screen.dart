@@ -36,8 +36,7 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
       _erro = null;
     });
     try {
-      final aulas =
-          await _aulaRepository.buscarHistoricoPorAluna(usuario.id);
+      final aulas = await _aulaRepository.buscarHistoricoPorAluna(usuario.id);
       setState(() => _aulas = aulas);
     } catch (e) {
       setState(() => _erro = 'Erro ao carregar aulas. Tente novamente.');
@@ -112,8 +111,7 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.fitness_center,
-                size: 64, color: Colors.grey.shade400),
+            Icon(Icons.fitness_center, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
               'Nenhuma aula encontrada',
@@ -137,8 +135,7 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
         children: [
           _buildResumo(),
           const SizedBox(height: 24),
-          ...porMes.entries
-              .map((e) => _buildGrupoMes(e.key, e.value)),
+          ...porMes.entries.map((e) => _buildGrupoMes(e.key, e.value)),
         ],
       ),
     );
@@ -156,12 +153,10 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
       ),
       child: Row(
         children: [
-          Expanded(
-              child: _buildStat('Total', _aulas.length.toString())),
+          Expanded(child: _buildStat('Total', _aulas.length.toString())),
           Container(width: 1, height: 48, color: Colors.white24),
           Expanded(
-              child:
-                  _buildStat('Realizadas', _aulasRealizadas.toString())),
+              child: _buildStat('Realizadas', _aulasRealizadas.toString())),
           Container(width: 1, height: 48, color: Colors.white24),
           Expanded(child: _buildStat('Faltas', _faltas.toString())),
         ],
@@ -223,12 +218,10 @@ class _AulaHistoricoCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 1.5,
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: cor.withValues(alpha: 0.12),
           child: Icon(icone, color: cor, size: 20),
@@ -249,14 +242,12 @@ class _AulaHistoricoCard extends StatelessWidget {
               Text(
                 aula.instrutora!,
                 style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary),
+                    fontSize: 12, color: AppColors.textSecondary),
               ),
           ],
         ),
         trailing: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: cor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
@@ -282,11 +273,7 @@ class _AulaHistoricoCard extends StatelessWidget {
           'Realizada'
         ),
       'cancelada' => (AppColors.error, Icons.cancel_outlined, 'Cancelada'),
-      'falta' => (
-          AppColors.warning,
-          Icons.warning_amber_outlined,
-          'Falta'
-        ),
+      'falta' => (AppColors.warning, Icons.warning_amber_outlined, 'Falta'),
       _ => (AppColors.info, Icons.schedule, 'Agendada'),
     };
   }
