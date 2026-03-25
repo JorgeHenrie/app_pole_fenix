@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/date_formatter.dart';
 import '../../models/assinatura.dart';
 import '../../models/horario_fixo.dart';
 import '../../models/usuario.dart';
@@ -346,21 +347,27 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                     const Text('Nenhum horário fixo cadastrado',
                         style: TextStyle(color: AppColors.textSecondary))
                   else
-                    ..._horarios.map((h) => Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          child: ListTile(
-                            leading: const Icon(Icons.schedule,
-                                color: AppColors.primary),
-                            title: Text(h.diaSemanaTexto),
-                            subtitle: Text('${h.horario} • ${h.modalidade}'),
-                            trailing: h.ativo
-                                ? const Icon(Icons.check_circle,
-                                    color: Colors.green)
-                                : const Icon(Icons.cancel, color: Colors.red),
-                          ),
-                        )),
+                    ..._horarios.map((h) {
+                      final proxima =
+                          _proximaOcorrencia(h.diaSemana, h.horario);
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          leading: const Icon(Icons.schedule,
+                              color: AppColors.primary),
+                          title: Text(
+                              '${h.diaSemanaTexto} às ${h.horario} • ${h.modalidade}'),
+                          subtitle:
+                              Text('Próxima: ${DateFormatter.data(proxima)}'),
+                          trailing: h.ativo
+                              ? const Icon(Icons.check_circle,
+                                  color: Colors.green)
+                              : const Icon(Icons.cancel, color: Colors.red),
+                        ),
+                      );
+                    }),
                 ],
               ),
       ),
@@ -386,4 +393,24 @@ class _InfoRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Calcula a próxima ocorrência de um horário fixo a partir de agora.
+DateTime _proximaOcorrencia(int diaSemana, String horario) {
+  final agora = DateTime.now();
+  final partes = horario.split(':');
+  final hora = int.parse(partes[0]);
+  final minuto = int.parse(partes[1]);
+  final int diasAte = (diaSemana - agora.weekday) % 7;
+  DateTime candidato = DateTime(
+    agora.year,
+    agora.month,
+    agora.day + diasAte,
+    hora,
+    minuto,
+  );
+  if (candidato.isBefore(agora)) {
+    candidato = candidato.add(const Duration(days: 7));
+  }
+  return candidato;
 }
