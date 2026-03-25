@@ -46,7 +46,6 @@ class AlunaDrawer extends StatelessWidget {
         final usuario = authProvider.usuario;
         final nomeAluna = usuario?.nome ?? 'Aluna';
         final iniciais = Helpers.iniciais(nomeAluna);
-        final temPlano = homeProvider.assinatura != null;
 
         return Drawer(
           child: Column(
@@ -90,13 +89,6 @@ class AlunaDrawer extends StatelessWidget {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    if (!temPlano)
-                      _DrawerItem(
-                        icone: Icons.add_card,
-                        rotulo: 'Contratar Plano',
-                        cor: AppColors.success,
-                        rota: Routes.contratarPlano,
-                      ),
                     _DrawerItem(
                       icone: Icons.schedule,
                       rotulo: 'Meus Horários',

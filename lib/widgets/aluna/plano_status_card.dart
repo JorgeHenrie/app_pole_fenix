@@ -70,21 +70,13 @@ class PlanoStatusCard extends StatelessWidget {
                     color: Colors.white70,
                   ),
             ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () =>
-                    Navigator.pushNamed(context, Routes.contratarPlano),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+            const SizedBox(height: 8),
+            Text(
+              'Entre em contato com o estúdio para ativar seu plano.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.white60,
+                    fontStyle: FontStyle.italic,
                   ),
-                ),
-                child: const Text('Contratar Plano'),
-              ),
             ),
           ],
         ),
@@ -145,11 +137,10 @@ class PlanoStatusCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       plano?.nome ?? 'Meu Plano',
-                      style:
-                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                   ],
                 ),
@@ -302,7 +293,8 @@ class PlanoStatusCard extends StatelessWidget {
       mensagem = '⚠️ Seu plano está vencido. Renove para continuar agendando.';
     } else if (proximoVencimento) {
       final dias = assinatura!.dataRenovacao.difference(DateTime.now()).inDays;
-      mensagem = '⏰ Seu plano vence em $dias dia(s). Renove para não perder o acesso às aulas.';
+      mensagem =
+          '⏰ Seu plano vence em $dias dia(s). Renove para não perder o acesso às aulas.';
     } else {
       mensagem =
           '🔶 Seus créditos estão baixos (${assinatura!.creditosDisponiveis} restantes).';

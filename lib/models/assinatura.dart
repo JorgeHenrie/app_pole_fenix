@@ -33,20 +33,30 @@ class Assinatura {
   bool get estaAtiva => status == 'ativa';
 
   factory Assinatura.fromMap(Map<String, dynamic> mapa, String id) {
+    DateTime _parseDate(dynamic raw) {
+      if (raw is Timestamp) return raw.toDate();
+      if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+      return DateTime.now();
+    }
+
+    DateTime? _parseDateNullable(dynamic raw) {
+      if (raw == null) return null;
+      if (raw is Timestamp) return raw.toDate();
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
     return Assinatura(
       id: id,
       alunaId: mapa['alunaId'] as String,
       planoId: mapa['planoId'] as String,
       status: mapa['status'] as String,
       creditosDisponiveis: mapa['creditosDisponiveis'] as int,
-      dataInicio: DateTime.parse(mapa['dataInicio'] as String),
-      dataRenovacao: DateTime.parse(mapa['dataRenovacao'] as String),
-      dataCancelamento: mapa['dataCancelamento'] != null
-          ? DateTime.parse(mapa['dataCancelamento'] as String)
-          : null,
-      horarioFixoIds: (mapa['horarioFixoIds'] as List<dynamic>?)
-              ?.cast<String>() ??
-          [],
+      dataInicio: _parseDate(mapa['dataInicio']),
+      dataRenovacao: _parseDate(mapa['dataRenovacao']),
+      dataCancelamento: _parseDateNullable(mapa['dataCancelamento']),
+      horarioFixoIds:
+          (mapa['horarioFixoIds'] as List<dynamic>?)?.cast<String>() ?? [],
       aulasRealizadas: mapa['aulasRealizadas'] as int? ?? 0,
       reposicoesDisponiveis: mapa['reposicoesDisponiveis'] as int? ?? 0,
     );
@@ -73,9 +83,8 @@ class Assinatura {
               ? (mapa['dataCancelamento'] as Timestamp).toDate()
               : DateTime.parse(mapa['dataCancelamento'] as String))
           : null,
-      horarioFixoIds: (mapa['horarioFixoIds'] as List<dynamic>?)
-              ?.cast<String>() ??
-          [],
+      horarioFixoIds:
+          (mapa['horarioFixoIds'] as List<dynamic>?)?.cast<String>() ?? [],
       aulasRealizadas: mapa['aulasRealizadas'] as int? ?? 0,
       reposicoesDisponiveis: mapa['reposicoesDisponiveis'] as int? ?? 0,
     );
@@ -87,9 +96,11 @@ class Assinatura {
       'planoId': planoId,
       'status': status,
       'creditosDisponiveis': creditosDisponiveis,
-      'dataInicio': dataInicio.toIso8601String(),
-      'dataRenovacao': dataRenovacao.toIso8601String(),
-      'dataCancelamento': dataCancelamento?.toIso8601String(),
+      'dataInicio': Timestamp.fromDate(dataInicio),
+      'dataRenovacao': Timestamp.fromDate(dataRenovacao),
+      'dataCancelamento': dataCancelamento != null
+          ? Timestamp.fromDate(dataCancelamento!)
+          : null,
       'horarioFixoIds': horarioFixoIds,
       'aulasRealizadas': aulasRealizadas,
       'reposicoesDisponiveis': reposicoesDisponiveis,
