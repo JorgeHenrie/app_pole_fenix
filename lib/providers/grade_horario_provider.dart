@@ -87,8 +87,13 @@ class GradeHorarioProvider extends ChangeNotifier {
       final Map<String, List<String>> nomesFixosPorSlot = {};
       await Future.wait(grade.map((g) async {
         final chave = '${g.diaSemana}_${g.horario}';
-        nomesFixosPorSlot[chave] =
-            await _gradeRepo.buscarNomesFixosPorSlot(g.diaSemana, g.horario);
+        try {
+          nomesFixosPorSlot[chave] =
+              await _gradeRepo.buscarNomesFixosPorSlot(g.diaSemana, g.horario);
+        } catch (e) {
+          debugPrint('buscarNomesFixosPorSlot erro [$chave]: $e');
+          nomesFixosPorSlot[chave] = [];
+        }
       }));
 
       final slots = <SlotDia>[];
@@ -112,8 +117,13 @@ class GradeHorarioProvider extends ChangeNotifier {
           // Inclui todos os slots da semana atual (mesmo passados) e futuros
           if (!dataHora.isBefore(inicioSemana)) {
             // Busca reposições agendadas nesta data/slot específica
-            final nomesRepo =
-                await _gradeRepo.buscarNomesReposicoesPorSlot(g.id, dataHora);
+            List<String> nomesRepo = [];
+            try {
+              nomesRepo =
+                  await _gradeRepo.buscarNomesReposicoesPorSlot(g.id, dataHora);
+            } catch (e) {
+              debugPrint('buscarNomesReposicoesPorSlot erro: $e');
+            }
             final todos = [...nomesFixos, ...nomesRepo];
 
             slots.add(SlotDia(
