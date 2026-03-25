@@ -9,23 +9,24 @@ class ReposicaoRepository {
     final snapshot = await _firestore
         .colecao(_colecao)
         .where('alunaId', isEqualTo: alunaId)
-        .orderBy('criadaEm', descending: true)
         .get();
-    return snapshot.docs
-        .map((doc) => Reposicao.fromMap(doc.data(), doc.id))
-        .toList();
+    final reposicoes = snapshot.docs
+        .map((doc) => Reposicao.fromFirestore(doc))
+        .toList()
+      ..sort((a, b) => b.criadaEm.compareTo(a.criadaEm));
+    return reposicoes;
   }
 
   Future<List<Reposicao>> buscarPendentesPorAluna(String alunaId) async {
-    final agora = DateTime.now().toIso8601String();
+    final agora = DateTime.now();
     final snapshot = await _firestore
         .colecao(_colecao)
         .where('alunaId', isEqualTo: alunaId)
         .where('status', isEqualTo: 'pendente')
-        .where('expiraEm', isGreaterThan: agora)
         .get();
     return snapshot.docs
-        .map((doc) => Reposicao.fromMap(doc.data(), doc.id))
+        .map((doc) => Reposicao.fromFirestore(doc))
+        .where((r) => r.expiraEm == null || r.expiraEm!.isAfter(agora))
         .toList();
   }
 

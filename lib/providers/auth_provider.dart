@@ -64,8 +64,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> login(String email, String senha) async {
     _setCarregando(true);
     try {
-      final credencial =
-          await _authService.login(email: email, senha: senha);
+      final credencial = await _authService.login(email: email, senha: senha);
       if (credencial.user != null) {
         await _carregarDadosUsuario(credencial.user!.uid);
       }
@@ -84,7 +83,7 @@ class AuthProvider extends ChangeNotifier {
     required String senha,
     required String nome,
     String? telefone,
-    String tipoUsuario = 'aluna',
+    String? planoId,
   }) async {
     _cadastrando = true;
     _setCarregando(true);
@@ -96,13 +95,12 @@ class AuthProvider extends ChangeNotifier {
           id: credencial.user!.uid,
           nome: nome,
           email: email,
-          tipoUsuario: tipoUsuario,
+          tipoUsuario: 'aluna',
           telefone: telefone,
           dataCadastro: DateTime.now(),
           ativo: true,
-          // Novas alunas ficam pendentes até aprovação do admin;
-          // administradores são aprovados automaticamente.
-          statusCadastro: tipoUsuario == 'aluna' ? 'pendente' : 'aprovado',
+          statusCadastro: 'pendente',
+          planoId: planoId,
         );
         // Define _usuario antes de salvar para evitar race condition
         _usuario = novoUsuario;

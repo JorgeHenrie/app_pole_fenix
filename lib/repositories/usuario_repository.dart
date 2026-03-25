@@ -54,14 +54,65 @@ class UsuarioRepository {
     return snap.docs.map((d) => Usuario.fromMap(d.data(), d.id)).toList();
   }
 
-  /// Aprova o cadastro de uma aluna.
-  Future<void> aprovar(String alunaId, String adminId) async {
-    await FirebaseFirestore.instance.collection(_colecao).doc(alunaId).update({
+  /// Aprova o cadastro de uma aluna, criando a assinatura e o horário fixo atomicamente.
+  Future<void> aprovarComPlano({
+    required String alunaId,
+    required String adminId,
+    required String planoId,
+    required int aulasPorMes,
+    required int duracaoDias,
+    required int diaSemana,
+    required String horario,
+    required String modalidade,
+  }) async {
+    final db = FirebaseFirestore.instance;
+    final batch = db.batch();
+    final agora = DateTime.now();
+    final dataRenovacao = agora.add(Duration(days: duracaoDias));
+
+    // 1. Aprovar usuário
+    batch.update(db.collection(_colecao).doc(alunaId), {
       'statusCadastro': 'aprovado',
-      'dataAprovacao': DateTime.now().toIso8601String(),
+      'dataAprovacao': Timestamp.fromDate(agora),
       'aprovadoPor': adminId,
       'motivoRejeicao': null,
     });
+
+    // 2. Criar assinatura
+    final assinaturaRef = db.collection('assinaturas').doc();
+    batch.set(assinaturaRef, {
+      'alunaId': alunaId,
+      'planoId': planoId,
+      'status': 'ativa',
+      'creditosDisponiveis': aulasPorMes,
+      'aulasRealizadas': 0,
+      'reposicoesDisponiveis': 0,
+      'horarioFixoIds': [],
+      'dataInicio': Timestamp.fromDate(agora),
+      'dataRenovacao': Timestamp.fromDate(dataRenovacao),
+      'dataCancelamento': null,
+    });
+
+    // 3. Criar horário fixo
+    final horarioRef = db.collection('horarios_fixos').doc();
+    batch.set(horarioRef, {
+      'alunaId': alunaId,
+      'assinaturaId': assinaturaRef.id,
+      'diaSemana': diaSemana,
+      'horario': horario,
+      'modalidade': modalidade,
+      'ativo': true,
+      'criadoEm': Timestamp.fromDate(agora),
+      'desativadoEm': null,
+      'motivoDesativacao': null,
+    });
+
+    // 4. Atualizar assinatura com o id do horário fixo
+    batch.update(assinaturaRef, {
+      'horarioFixoIds': [horarioRef.id],
+    });
+
+    await batch.commit();
   }
 
   /// Rejeita o cadastro de uma aluna com motivo opcional.

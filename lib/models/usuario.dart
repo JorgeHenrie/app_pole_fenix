@@ -18,6 +18,9 @@ class Usuario {
   final String? aprovadoPor; // ID do admin que aprovou/rejeitou
   final String? motivoRejeicao;
 
+  /// Plano escolhido pela aluna no cadastro (a ser confirmado pelo admin).
+  final String? planoId;
+
   const Usuario({
     required this.id,
     required this.nome,
@@ -32,6 +35,7 @@ class Usuario {
     this.dataAprovacao,
     this.aprovadoPor,
     this.motivoRejeicao,
+    this.planoId,
   });
 
   factory Usuario.fromMap(Map<String, dynamic> mapa, String id) {
@@ -56,8 +60,7 @@ class Usuario {
           mapa['perfil'] as String? ??
           'aluna',
       telefone: mapa['telefone'] as String?,
-      dataCadastro:
-          _parseDateTime(mapa['dataCadastro'] ?? mapa['criadoEm']),
+      dataCadastro: _parseDateTime(mapa['dataCadastro'] ?? mapa['criadoEm']),
       ativo: mapa['ativo'] as bool? ?? true,
       fotoUrl: mapa['fotoUrl'] as String?,
       atualizadoEm: _parseDateTimeOptional(mapa['atualizadoEm']),
@@ -66,11 +69,11 @@ class Usuario {
       dataAprovacao: _parseDateTimeOptional(mapa['dataAprovacao']),
       aprovadoPor: mapa['aprovadoPor'] as String?,
       motivoRejeicao: mapa['motivoRejeicao'] as String?,
+      planoId: mapa['planoId'] as String?,
     );
   }
 
-  factory Usuario.fromFirestore(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory Usuario.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     return Usuario.fromMap(doc.data()!, doc.id);
   }
 
@@ -88,6 +91,7 @@ class Usuario {
       'dataAprovacao': dataAprovacao?.toIso8601String(),
       'aprovadoPor': aprovadoPor,
       'motivoRejeicao': motivoRejeicao,
+      'planoId': planoId,
     };
   }
 
@@ -103,6 +107,7 @@ class Usuario {
     DateTime? dataAprovacao,
     String? aprovadoPor,
     String? motivoRejeicao,
+    String? planoId,
   }) {
     return Usuario(
       id: id,
@@ -118,6 +123,7 @@ class Usuario {
       dataAprovacao: dataAprovacao ?? this.dataAprovacao,
       aprovadoPor: aprovadoPor ?? this.aprovadoPor,
       motivoRejeicao: motivoRejeicao ?? this.motivoRejeicao,
+      planoId: planoId ?? this.planoId,
     );
   }
 }
