@@ -55,7 +55,8 @@ class UsuarioRepository {
   }
 
   /// Aprova o cadastro de uma aluna, criando a assinatura e o horário fixo atomicamente.
-  Future<void> aprovarComPlano({
+  /// Retorna o ID do documento horario_fixo criado.
+  Future<String> aprovarComPlano({
     required String alunaId,
     required String adminId,
     required String planoId,
@@ -113,6 +114,7 @@ class UsuarioRepository {
     });
 
     await batch.commit();
+    return horarioRef.id;
   }
 
   /// Rejeita o cadastro de uma aluna com motivo opcional.

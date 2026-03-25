@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/horario_fixo.dart';
 import '../../models/plano.dart';
 import '../../models/grade_horario.dart';
 import '../../models/usuario.dart';
@@ -8,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../repositories/grade_horario_repository.dart';
 import '../../repositories/plano_repository.dart';
 import '../../repositories/usuario_repository.dart';
+import '../../services/geracao_aulas_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela admin para aprovar ou rejeitar cadastros pendentes de alunas.
@@ -83,7 +85,7 @@ class _AprovarCadastrosScreenState extends State<AprovarCadastrosScreen> {
     if (resultado == null || !mounted) return;
 
     try {
-      await _repo.aprovarComPlano(
+      final horarioFixoId = await _repo.aprovarComPlano(
         alunaId: aluna.id,
         adminId: adminId,
         planoId: resultado.plano.id,
@@ -93,6 +95,21 @@ class _AprovarCadastrosScreenState extends State<AprovarCadastrosScreen> {
         horario: resultado.slot.horario,
         modalidade: resultado.slot.modalidade,
       );
+
+      // Gera as aulas das próximas semanas, igual ao fluxo self-service
+      await GeracaoAulasService().gerarAulasParaHorarioFixo(
+        HorarioFixo(
+          id: horarioFixoId,
+          alunaId: aluna.id,
+          assinaturaId: '',
+          diaSemana: resultado.slot.diaSemana,
+          horario: resultado.slot.horario,
+          modalidade: resultado.slot.modalidade,
+          ativo: true,
+          criadoEm: DateTime.now(),
+        ),
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
