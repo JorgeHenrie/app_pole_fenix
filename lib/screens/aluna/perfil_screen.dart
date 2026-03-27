@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -9,6 +12,7 @@ import '../../models/plano.dart';
 import '../../models/usuario.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/home_aluna_provider.dart';
+import '../../services/firebase/storage_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela de perfil da aluna com info pessoais, plano e timeline.
@@ -20,6 +24,40 @@ class PerfilScreen extends StatefulWidget {
 }
 
 class _PerfilScreenState extends State<PerfilScreen> {
+  bool _uploadandoFoto = false;
+
+  Future<void> _selecionarFoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: 600,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _uploadandoFoto = true);
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.usuario!.id;
+      final arquivo = File(picked.path);
+      final caminho = 'fotos_perfil/$userId.jpg';
+      final url = await StorageService().uploadArquivo(
+        arquivo: arquivo,
+        caminho: caminho,
+      );
+      await authProvider.atualizarFotoUrl(url);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Erro ao atualizar foto. Tente novamente.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadandoFoto = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -97,22 +135,57 @@ class _PerfilScreenState extends State<PerfilScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 32),
-                CircleAvatar(
-                  radius: 44,
-                  backgroundColor: AppColors.secondary,
-                  backgroundImage: usuario.fotoUrl != null
-                      ? NetworkImage(usuario.fotoUrl!)
-                      : null,
-                  child: usuario.fotoUrl == null
-                      ? Text(
-                          iniciais,
-                          style: const TextStyle(
+                GestureDetector(
+                  onTap: _uploadandoFoto ? null : _selecionarFoto,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 44,
+                        backgroundColor: AppColors.secondary,
+                        backgroundImage: usuario.fotoUrl != null
+                            ? NetworkImage(usuario.fotoUrl!)
+                            : null,
+                        child: usuario.fotoUrl == null
+                            ? Text(
+                                iniciais,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 28,
+                                ),
+                              )
+                            : null,
+                      ),
+                      if (_uploadandoFoto)
+                        const CircleAvatar(
+                          radius: 44,
+                          backgroundColor: Colors.black45,
+                          child: CircularProgressIndicator(
                             color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 28,
+                            strokeWidth: 2.5,
                           ),
-                        )
-                      : null,
+                        ),
+                      if (!_uploadandoFoto)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(

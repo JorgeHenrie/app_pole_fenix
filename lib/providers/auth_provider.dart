@@ -146,6 +146,14 @@ class AuthProvider extends ChangeNotifier {
     await _carregarDadosUsuario(uid);
   }
 
+  /// Atualiza a URL da foto de perfil localmente e no Firestore.
+  Future<void> atualizarFotoUrl(String fotoUrl) async {
+    if (_usuario == null) return;
+    await _usuarioRepository.atualizarFotoUrl(_usuario!.id, fotoUrl);
+    _usuario = _usuario!.copyWith(fotoUrl: fotoUrl);
+    notifyListeners();
+  }
+
   /// Limpa a mensagem de erro atual.
   void limparErro() {
     _erro = null;

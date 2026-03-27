@@ -31,6 +31,14 @@ class UsuarioRepository {
     );
   }
 
+  /// Atualiza apenas a URL da foto de perfil da usuária.
+  Future<void> atualizarFotoUrl(String id, String? fotoUrl) async {
+    await FirebaseFirestore.instance
+        .collection(_colecao)
+        .doc(id)
+        .update({'fotoUrl': fotoUrl});
+  }
+
   /// Busca uma usuária pelo e-mail.
   Future<Usuario?> buscarPorEmail(String email) async {
     final querySnapshot = await FirebaseFirestore.instance
