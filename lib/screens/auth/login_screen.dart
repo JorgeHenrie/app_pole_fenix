@@ -43,10 +43,28 @@ class _LoginScreenState extends State<LoginScreen> {
         Navigator.of(context).pushReplacementNamed(Routes.homeAdmin);
         return;
       }
+      // Conta desativada (aluna excluída pelo admin)
+      if (!usuario.ativo) {
+        await authProvider.logout();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Sua conta foi desativada. Entre em contato com o estúdio.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 6),
+          ),
+        );
+        return;
+      }
+      // Primeiro acesso: aluna importada deve atualizar e-mail e senha
+      if (usuario.primeiroAcesso) {
+        Navigator.of(context).pushReplacementNamed(Routes.primeiroAcesso);
+        return;
+      }
       // Verifica status do cadastro da aluna
       if (usuario.statusCadastro == 'pendente') {
-        Navigator.of(context)
-            .pushReplacementNamed(Routes.aguardandoAprovacao);
+        Navigator.of(context).pushReplacementNamed(Routes.aguardandoAprovacao);
         return;
       }
       if (usuario.statusCadastro == 'rejeitado') {

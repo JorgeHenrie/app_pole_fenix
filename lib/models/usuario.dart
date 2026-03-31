@@ -1,4 +1,78 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+
+/// Níveis de progressão das alunas.
+enum NivelAluna {
+  experimental,
+  iniciante,
+  basico,
+  interI,
+  interII,
+  avancado;
+
+  /// Rótulo exibido na UI.
+  String get label {
+    switch (this) {
+      case NivelAluna.experimental:
+        return 'EXPERIMENTAL';
+      case NivelAluna.iniciante:
+        return 'INICIANTE';
+      case NivelAluna.basico:
+        return 'BÁSICO';
+      case NivelAluna.interI:
+        return 'INTER I';
+      case NivelAluna.interII:
+        return 'INTER II';
+      case NivelAluna.avancado:
+        return 'AVANÇADO';
+    }
+  }
+
+  /// Valor salvo no Firestore.
+  String get valor {
+    switch (this) {
+      case NivelAluna.experimental:
+        return 'experimental';
+      case NivelAluna.iniciante:
+        return 'iniciante';
+      case NivelAluna.basico:
+        return 'basico';
+      case NivelAluna.interI:
+        return 'inter_i';
+      case NivelAluna.interII:
+        return 'inter_ii';
+      case NivelAluna.avancado:
+        return 'avancado';
+    }
+  }
+
+  /// Cor associada ao nível.
+  Color get cor {
+    switch (this) {
+      case NivelAluna.experimental:
+        return Colors.grey;
+      case NivelAluna.iniciante:
+        return Colors.teal;
+      case NivelAluna.basico:
+        return Colors.blue;
+      case NivelAluna.interI:
+        return Colors.orange;
+      case NivelAluna.interII:
+        return Colors.deepOrange;
+      case NivelAluna.avancado:
+        return Colors.purple;
+    }
+  }
+
+  /// Constrói a partir do valor armazenado no Firestore.
+  static NivelAluna? fromValor(String? valor) {
+    if (valor == null) return null;
+    return NivelAluna.values.firstWhere(
+      (n) => n.valor == valor,
+      orElse: () => NivelAluna.experimental,
+    );
+  }
+}
 
 /// Modelo que representa uma usuária (aluna ou administradora) do app.
 class Usuario {
@@ -21,6 +95,12 @@ class Usuario {
   /// Plano escolhido pela aluna no cadastro (a ser confirmado pelo admin).
   final String? planoId;
 
+  /// Nível de progressão da aluna.
+  final NivelAluna? nivel;
+
+  /// Indica que a aluna deve atualizar e-mail e senha no primeiro acesso.
+  final bool primeiroAcesso;
+
   const Usuario({
     required this.id,
     required this.nome,
@@ -36,6 +116,8 @@ class Usuario {
     this.aprovadoPor,
     this.motivoRejeicao,
     this.planoId,
+    this.nivel,
+    this.primeiroAcesso = false,
   });
 
   factory Usuario.fromMap(Map<String, dynamic> mapa, String id) {
@@ -70,6 +152,8 @@ class Usuario {
       aprovadoPor: mapa['aprovadoPor'] as String?,
       motivoRejeicao: mapa['motivoRejeicao'] as String?,
       planoId: mapa['planoId'] as String?,
+      nivel: NivelAluna.fromValor(mapa['nivel'] as String?),
+      primeiroAcesso: mapa['primeiroAcesso'] as bool? ?? false,
     );
   }
 
@@ -92,6 +176,8 @@ class Usuario {
       'aprovadoPor': aprovadoPor,
       'motivoRejeicao': motivoRejeicao,
       'planoId': planoId,
+      'nivel': nivel?.valor,
+      'primeiroAcesso': primeiroAcesso,
     };
   }
 
@@ -108,6 +194,8 @@ class Usuario {
     String? aprovadoPor,
     String? motivoRejeicao,
     String? planoId,
+    NivelAluna? nivel,
+    bool? primeiroAcesso,
   }) {
     return Usuario(
       id: id,
@@ -124,6 +212,8 @@ class Usuario {
       aprovadoPor: aprovadoPor ?? this.aprovadoPor,
       motivoRejeicao: motivoRejeicao ?? this.motivoRejeicao,
       planoId: planoId ?? this.planoId,
+      nivel: nivel ?? this.nivel,
+      primeiroAcesso: primeiroAcesso ?? this.primeiroAcesso,
     );
   }
 }

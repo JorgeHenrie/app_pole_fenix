@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../repositories/usuario_repository.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/assinatura.dart';
 import '../../models/horario_fixo.dart';
@@ -192,7 +194,31 @@ class _AlunaCard extends StatelessWidget {
           aluna.nome,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        subtitle: Text(aluna.email),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(aluna.email),
+            if (aluna.nivel != null)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: aluna.nivel!.cor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: aluna.nivel!.cor, width: 0.8),
+                ),
+                child: Text(
+                  aluna.nivel!.label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: aluna.nivel!.cor,
+                  ),
+                ),
+              ),
+          ],
+        ),
         trailing: const Icon(Icons.chevron_right),
       ),
     );
@@ -218,10 +244,14 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
   Assinatura? _assinatura;
   List<HorarioFixo> _horarios = [];
   bool _carregando = true;
+  late NivelAluna? _nivel;
+  bool _salvandoNivel = false;
+  final UsuarioRepository _usuarioRepo = UsuarioRepository();
 
   @override
   void initState() {
     super.initState();
+    _nivel = widget.aluna.nivel;
     _carregarDados();
   }
 
@@ -238,6 +268,83 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
       });
     } catch (_) {
       setState(() => _carregando = false);
+    }
+  }
+
+  Future<void> _atualizarNivel(NivelAluna? novoNivel) async {
+    setState(() => _salvandoNivel = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(widget.aluna.id)
+          .update({'nivel': novoNivel?.valor});
+      setState(() => _nivel = novoNivel);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao salvar nível')),
+        );
+      }
+    } finally {
+      setState(() => _salvandoNivel = false);
+    }
+  }
+
+  Future<void> _excluirAluna() async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir aluna'),
+        content: Text(
+          'Tem certeza que deseja excluir ${widget.aluna.nome}?\n\n'
+          'O acesso dela ao app será bloqueado imediatamente e os horários fixos serão liberados.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado != true || !mounted) return;
+
+    // Mostra loading enquanto processa
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final fn = FirebaseFunctions.instanceFor(region: 'southamerica-east1')
+          .httpsCallable('excluirAluna');
+      await fn.call({'alunaId': widget.aluna.id});
+
+      if (mounted) {
+        Navigator.of(context).pop(); // fecha loading
+        Navigator.of(context).pop(); // fecha o sheet
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('${widget.aluna.nome} foi removida e o acesso bloqueado.'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // fecha loading
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir aluna: $e')),
+        );
+      }
     }
   }
 
@@ -301,6 +408,50 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 24),
+                  // ── Nível da aluna ──────────────────────────────────
+                  Row(
+                    children: [
+                      const Text(
+                        'Nível',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_salvandoNivel)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: NivelAluna.values.map((n) {
+                      final selecionado = _nivel == n;
+                      return ChoiceChip(
+                        label: Text(n.label),
+                        selected: selecionado,
+                        selectedColor: n.cor.withOpacity(0.2),
+                        labelStyle: TextStyle(
+                          color: selecionado ? n.cor : Colors.black87,
+                          fontWeight:
+                              selecionado ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        side: BorderSide(
+                          color: selecionado ? n.cor : Colors.grey.shade300,
+                        ),
+                        onSelected: _salvandoNivel
+                            ? null
+                            : (_) => _atualizarNivel(selecionado ? null : n),
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 24),
                   const Text(
@@ -368,6 +519,20 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                         ),
                       );
                     }),
+                  const SizedBox(height: 32),
+                  OutlinedButton.icon(
+                    onPressed: _excluirAluna,
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text(
+                      'Excluir aluna',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
       ),

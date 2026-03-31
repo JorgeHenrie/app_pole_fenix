@@ -78,3 +78,6 @@ coverage/
 # Arquivos gerados
 *.g.dart
 *.freezed.dart
+
+# Node.js
+functions/node_modules/
