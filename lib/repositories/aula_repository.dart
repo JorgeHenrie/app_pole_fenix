@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/aula.dart';
 import '../services/firebase/firestore_service.dart';
 
@@ -120,5 +122,51 @@ class AulaRepository {
       id: aulaId,
       dados: {'status': 'realizada'},
     );
+  }
+
+  /// Verifica aulas 'agendada' com dataHora no passado e as marca como
+  /// 'realizada', descontando o crédito e incrementando aulasRealizadas
+  /// na assinatura via WriteBatch atômico.
+  /// Retorna o número de aulas que tiveram baixa.
+  Future<int> darBaixaAulasPassadas(
+    String alunaId,
+    String assinaturaId,
+  ) async {
+    final agora = DateTime.now();
+
+    final snapshot = await _firestore
+        .colecao(_colecao)
+        .where('alunaId', isEqualTo: alunaId)
+        .where('status', isEqualTo: 'agendada')
+        .get();
+
+    final aulasPassadas = snapshot.docs.where((doc) {
+      final aula = Aula.fromMap(doc.data(), doc.id);
+      return aula.dataHora.isBefore(agora);
+    }).toList();
+
+    if (aulasPassadas.isEmpty) return 0;
+
+    final batch = FirebaseFirestore.instance.batch();
+
+    for (final doc in aulasPassadas) {
+      batch.update(
+        FirebaseFirestore.instance.collection(_colecao).doc(doc.id),
+        {'status': 'realizada'},
+      );
+    }
+
+    // Decrementar créditos e registrar aulas realizadas atomicamente.
+    // Usamos FieldValue.increment para evitar race conditions.
+    batch.update(
+      FirebaseFirestore.instance.collection('assinaturas').doc(assinaturaId),
+      {
+        'creditosDisponiveis': FieldValue.increment(-aulasPassadas.length),
+        'aulasRealizadas': FieldValue.increment(aulasPassadas.length),
+      },
+    );
+
+    await batch.commit();
+    return aulasPassadas.length;
   }
 }

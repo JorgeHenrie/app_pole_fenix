@@ -24,7 +24,6 @@ class _CadastroScreenState extends State<CadastroScreen> {
 
   bool _obscurecerSenha = true;
   bool _obscurecerConfirmar = true;
-  String _tipoUsuario = 'aluna';
 
   final _telefoneMask = MaskTextInputFormatter(
     mask: '(##) #####-####',
@@ -52,18 +51,14 @@ class _CadastroScreenState extends State<CadastroScreen> {
       senha: _senhaController.text,
       nome: _nomeController.text.trim(),
       telefone: telefone.isEmpty ? null : telefone,
-      tipoUsuario: _tipoUsuario,
     );
 
     if (!mounted) return;
 
     if (authProvider.estaAutenticado && authProvider.usuario != null) {
       final usuario = authProvider.usuario!;
-      if (usuario.tipoUsuario == 'admin') {
-        Navigator.of(context).pushReplacementNamed(Routes.homeAdmin);
-      } else if (usuario.statusCadastro == 'pendente') {
-        Navigator.of(context)
-            .pushReplacementNamed(Routes.aguardandoAprovacao);
+      if (usuario.statusCadastro == 'pendente') {
+        Navigator.of(context).pushReplacementNamed(Routes.aguardandoAprovacao);
       } else {
         Navigator.of(context).pushReplacementNamed(Routes.homeAluna);
       }
@@ -140,8 +135,8 @@ class _CadastroScreenState extends State<CadastroScreen> {
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined,
                       ),
-                      onPressed: () => setState(
-                          () => _obscurecerSenha = !_obscurecerSenha),
+                      onPressed: () =>
+                          setState(() => _obscurecerSenha = !_obscurecerSenha),
                     ),
                   ),
                   validator: Validators.senha,
@@ -173,45 +168,6 @@ class _CadastroScreenState extends State<CadastroScreen> {
                     }
                     return null;
                   },
-                ),
-                const SizedBox(height: 16),
-                // Seleção de tipo de usuário
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8, bottom: 4),
-                          child: Text(
-                            'Tipo de usuário',
-                            style:
-                                Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                          ),
-                        ),
-                        RadioListTile<String>(
-                          title: const Text('Aluna'),
-                          value: 'aluna',
-                          groupValue: _tipoUsuario,
-                          onChanged: (value) =>
-                              setState(() => _tipoUsuario = value!),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        RadioListTile<String>(
-                          title: const Text('Administrador'),
-                          value: 'admin',
-                          groupValue: _tipoUsuario,
-                          onChanged: (value) =>
-                              setState(() => _tipoUsuario = value!),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
                 const SizedBox(height: 16),
                 // Mensagem de erro

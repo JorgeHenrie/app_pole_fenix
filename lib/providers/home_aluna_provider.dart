@@ -35,8 +35,25 @@ class HomeAlunaProvider extends ChangeNotifier {
     _erro = null;
     notifyListeners();
     try {
+      // 1. Carregar assinatura primeiro para ter o ID disponível.
+      await _carregarAssinatura(alunaId);
+
+      // 2. Dar baixa automática em aulas cujo horário já passou.
+      //    Faz isso antes de carregar as próximas aulas para garantir
+      //    que os créditos já aparecem atualizados.
+      if (_assinatura != null && _assinatura!.estaAtiva) {
+        final baixas = await _aulaRepository.darBaixaAulasPassadas(
+          alunaId,
+          _assinatura!.id,
+        );
+        // Recarregar assinatura para refletir os créditos descontados.
+        if (baixas > 0) {
+          await _carregarAssinatura(alunaId);
+        }
+      }
+
+      // 3. Carregar demais dados em paralelo.
       await Future.wait([
-        _carregarAssinatura(alunaId),
         _carregarProximasAulas(alunaId),
         _carregarEventos(),
       ]);

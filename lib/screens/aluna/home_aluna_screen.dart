@@ -4,11 +4,12 @@ import 'package:provider/provider.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/grade_horario_provider.dart';
 import '../../providers/home_aluna_provider.dart';
 import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/aluna/eventos_section.dart';
+import '../../widgets/aluna/grade_horarios_studio_section.dart';
 import '../../widgets/aluna/plano_status_card.dart';
-import '../../widgets/aluna/proximas_aulas_section.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela inicial da aluna com dashboard completo.
@@ -28,9 +29,16 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
     final usuario = context.watch<AuthProvider>().usuario;
     if (usuario != null && !_dadosCarregados) {
       _dadosCarregados = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final homeProvider = context.read<HomeAlunaProvider>();
+        final gradeProvider = context.read<GradeHorarioProvider>();
+        await homeProvider.carregarDados(usuario.id);
         if (mounted) {
-          context.read<HomeAlunaProvider>().carregarDados(usuario.id);
+          gradeProvider.carregar(
+            usuario.id,
+            assinatura: homeProvider.assinatura,
+          );
         }
       });
     }
@@ -39,9 +47,13 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
   Future<void> _carregarDados() async {
     final authProvider = context.read<AuthProvider>();
     final homeProvider = context.read<HomeAlunaProvider>();
+    final gradeProvider = context.read<GradeHorarioProvider>();
     final usuario = authProvider.usuario;
     if (usuario != null) {
       await homeProvider.carregarDados(usuario.id);
+      if (mounted) {
+        gradeProvider.carregar(usuario.id, assinatura: homeProvider.assinatura);
+      }
     }
   }
 
@@ -85,10 +97,8 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
                               plano: homeProvider.plano,
                             ),
                             const SizedBox(height: 24),
-                            // Próximas aulas
-                            ProximasAulasSection(
-                              aulas: homeProvider.proximasAulas,
-                            ),
+                            // Grade de horários do estúdio
+                            const GradeHorariosStudioSection(),
                             const SizedBox(height: 24),
                             // Eventos próximos
                             EventosSection(

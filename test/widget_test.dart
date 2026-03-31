@@ -74,7 +74,9 @@ void main() {
     test('vagas disponíveis calculadas corretamente', () {
       final aula = Aula(
         id: '1',
+        alunaId: 'aluna-1',
         titulo: 'Aula de Pole',
+        modalidade: 'Pole Dance',
         dataHora: DateTime.now(),
         duracaoMinutos: 60,
         capacidadeMaxima: 3,
@@ -89,7 +91,9 @@ void main() {
     test('aula sem vagas detectada corretamente', () {
       final aula = Aula(
         id: '2',
+        alunaId: 'aluna-1',
         titulo: 'Aula Lotada',
+        modalidade: 'Pole Dance',
         dataHora: DateTime.now(),
         duracaoMinutos: 60,
         capacidadeMaxima: 3,

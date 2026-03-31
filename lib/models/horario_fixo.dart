@@ -39,6 +39,19 @@ class HorarioFixo {
   }
 
   factory HorarioFixo.fromMap(Map<String, dynamic> mapa, String id) {
+    DateTime _parseDate(dynamic raw) {
+      if (raw is Timestamp) return raw.toDate();
+      if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+      return DateTime.now();
+    }
+
+    DateTime? _parseDateNullable(dynamic raw) {
+      if (raw == null) return null;
+      if (raw is Timestamp) return raw.toDate();
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
     return HorarioFixo(
       id: id,
       alunaId: mapa['alunaId'] as String,
@@ -47,15 +60,14 @@ class HorarioFixo {
       horario: mapa['horario'] as String,
       modalidade: mapa['modalidade'] as String,
       ativo: mapa['ativo'] as bool,
-      criadoEm: DateTime.parse(mapa['criadoEm'] as String),
-      desativadoEm: mapa['desativadoEm'] != null
-          ? DateTime.parse(mapa['desativadoEm'] as String)
-          : null,
+      criadoEm: _parseDate(mapa['criadoEm']),
+      desativadoEm: _parseDateNullable(mapa['desativadoEm']),
       motivoDesativacao: mapa['motivoDesativacao'] as String?,
     );
   }
 
-  factory HorarioFixo.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory HorarioFixo.fromFirestore(
+      DocumentSnapshot<Map<String, dynamic>> doc) {
     final mapa = doc.data()!;
     return HorarioFixo(
       id: doc.id,
@@ -81,8 +93,9 @@ class HorarioFixo {
       'horario': horario,
       'modalidade': modalidade,
       'ativo': ativo,
-      'criadoEm': criadoEm.toIso8601String(),
-      'desativadoEm': desativadoEm?.toIso8601String(),
+      'criadoEm': Timestamp.fromDate(criadoEm),
+      'desativadoEm':
+          desativadoEm != null ? Timestamp.fromDate(desativadoEm!) : null,
       'motivoDesativacao': motivoDesativacao,
     };
   }

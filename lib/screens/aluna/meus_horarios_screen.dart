@@ -13,6 +13,7 @@ import '../../repositories/aula_repository.dart';
 import '../../repositories/grade_horario_repository.dart';
 import '../../repositories/reposicao_repository.dart';
 import '../../repositories/solicitacao_mudanca_horario_repository.dart';
+import '../../services/geracao_aulas_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 class MeusHorariosScreen extends StatefulWidget {
@@ -41,6 +42,16 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
 
     await horarioProvider.carregarHorariosDeAluna(usuario.id);
     await _carregarProximasAulas(usuario.id);
+
+    // Se o aluno tem horários fixos mas nenhuma aula futura foi gerada
+    // (ex.: aprovado pelo admin antes do fluxo de geração automática),
+    // gera as aulas agora e recarrega.
+    if (horarioProvider.horariosFixos.isNotEmpty && _proximasAulas.isEmpty) {
+      for (final h in horarioProvider.horariosFixos) {
+        await GeracaoAulasService().gerarAulasParaHorarioFixo(h);
+      }
+      await _carregarProximasAulas(usuario.id);
+    }
   }
 
   Future<void> _carregarProximasAulas(String alunaId) async {

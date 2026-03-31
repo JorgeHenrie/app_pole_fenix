@@ -95,15 +95,17 @@ class Reposicao {
     return {
       'aulaOriginalId': aulaOriginalId,
       'alunaId': alunaId,
-      'novaDataHora': novaDataHora?.toIso8601String(),
+      'novaDataHora':
+          novaDataHora != null ? Timestamp.fromDate(novaDataHora!) : null,
       'novoHorarioId': novoHorarioId,
       'status': status,
       'motivoOriginal': motivoOriginal,
       'atestadoValidado': atestadoValidado,
-      'criadaEm': criadaEm.toIso8601String(),
-      'expiraEm': expiraEm?.toIso8601String(),
-      'agendadaEm': agendadaEm?.toIso8601String(),
-      'realizadaEm': realizadaEm?.toIso8601String(),
+      'criadaEm': Timestamp.fromDate(criadaEm),
+      'expiraEm': expiraEm != null ? Timestamp.fromDate(expiraEm!) : null,
+      'agendadaEm': agendadaEm != null ? Timestamp.fromDate(agendadaEm!) : null,
+      'realizadaEm':
+          realizadaEm != null ? Timestamp.fromDate(realizadaEm!) : null,
     };
   }
 

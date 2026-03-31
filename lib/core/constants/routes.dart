@@ -36,4 +36,10 @@ class Routes {
 
   // Notificações
   static const String notificacoes = '/notificacoes';
+
+  // Admin – importação
+  static const String importarAlunas = '/admin/importar-alunas';
+
+  // Primeiro acesso (alunas importadas)
+  static const String primeiroAcesso = '/primeiro-acesso';
 }

@@ -64,8 +64,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> login(String email, String senha) async {
     _setCarregando(true);
     try {
-      final credencial =
-          await _authService.login(email: email, senha: senha);
+      final credencial = await _authService.login(email: email, senha: senha);
       if (credencial.user != null) {
         await _carregarDadosUsuario(credencial.user!.uid);
       }
@@ -84,7 +83,7 @@ class AuthProvider extends ChangeNotifier {
     required String senha,
     required String nome,
     String? telefone,
-    String tipoUsuario = 'aluna',
+    String? planoId,
   }) async {
     _cadastrando = true;
     _setCarregando(true);
@@ -96,13 +95,12 @@ class AuthProvider extends ChangeNotifier {
           id: credencial.user!.uid,
           nome: nome,
           email: email,
-          tipoUsuario: tipoUsuario,
+          tipoUsuario: 'aluna',
           telefone: telefone,
           dataCadastro: DateTime.now(),
           ativo: true,
-          // Novas alunas ficam pendentes até aprovação do admin;
-          // administradores são aprovados automaticamente.
-          statusCadastro: tipoUsuario == 'aluna' ? 'pendente' : 'aprovado',
+          statusCadastro: 'pendente',
+          planoId: planoId,
         );
         // Define _usuario antes de salvar para evitar race condition
         _usuario = novoUsuario;
@@ -146,6 +144,14 @@ class AuthProvider extends ChangeNotifier {
     final uid = _authService.usuarioAtual?.uid;
     if (uid == null) return;
     await _carregarDadosUsuario(uid);
+  }
+
+  /// Atualiza a URL da foto de perfil localmente e no Firestore.
+  Future<void> atualizarFotoUrl(String fotoUrl) async {
+    if (_usuario == null) return;
+    await _usuarioRepository.atualizarFotoUrl(_usuario!.id, fotoUrl);
+    _usuario = _usuario!.copyWith(fotoUrl: fotoUrl);
+    notifyListeners();
   }
 
   /// Limpa a mensagem de erro atual.

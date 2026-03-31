@@ -32,6 +32,8 @@ import 'screens/admin/validar_atestados_screen.dart';
 import 'screens/admin/visualizar_ocupacao_screen.dart';
 import 'screens/admin/gerenciar_planos_screen.dart';
 import 'screens/admin/aprovar_cadastros_screen.dart';
+import 'screens/admin/importar_alunas_screen.dart';
+import 'screens/auth/primeiro_acesso_screen.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -94,6 +96,8 @@ class App extends StatelessWidget {
         Routes.gerenciarPlanos: (context) => const GerenciarPlanosScreen(),
         Routes.aprovarCadastros: (context) => const AprovarCadastrosScreen(),
         Routes.notificacoes: (context) => const NotificacoesScreen(),
+        Routes.importarAlunas: (context) => const ImportarAlunasScreen(),
+        Routes.primeiroAcesso: (context) => const PrimeiroAcessoScreen(),
       },
     );
   }
