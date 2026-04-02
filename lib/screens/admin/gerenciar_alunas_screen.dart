@@ -246,6 +246,7 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
   bool _carregando = true;
   late NivelAluna? _nivel;
   bool _salvandoNivel = false;
+  bool _salvandoVencimento = false;
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
 
   @override
@@ -287,6 +288,58 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
       }
     } finally {
       setState(() => _salvandoNivel = false);
+    }
+  }
+
+  Future<void> _editarVencimento() async {
+    if (_assinatura == null) return;
+    final atual = _assinatura!.dataRenovacao;
+    final novaData = await showDatePicker(
+      context: context,
+      initialDate: atual,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2099),
+      locale: const Locale('pt', 'BR'),
+    );
+    if (novaData == null || !mounted) return;
+
+    setState(() => _salvandoVencimento = true);
+    try {
+      await FirebaseFirestore.instance
+          .collection('assinaturas')
+          .doc(_assinatura!.id)
+          .update({'dataRenovacao': Timestamp.fromDate(novaData)});
+      setState(() {
+        _assinatura = Assinatura(
+          id: _assinatura!.id,
+          alunaId: _assinatura!.alunaId,
+          planoId: _assinatura!.planoId,
+          status: _assinatura!.status,
+          creditosDisponiveis: _assinatura!.creditosDisponiveis,
+          dataInicio: _assinatura!.dataInicio,
+          dataRenovacao: novaData,
+          dataCancelamento: _assinatura!.dataCancelamento,
+          horarioFixoIds: _assinatura!.horarioFixoIds,
+          aulasRealizadas: _assinatura!.aulasRealizadas,
+          reposicoesDisponiveis: _assinatura!.reposicoesDisponiveis,
+        );
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Data de vencimento atualizada!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar: $e')),
+        );
+      }
+    } finally {
+      setState(() => _salvandoVencimento = false);
     }
   }
 
@@ -454,12 +507,23 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                     }).toList(),
                   ),
                   const SizedBox(height: 24),
-                  const Text(
-                    'Assinatura',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Assinatura',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_salvandoVencimento)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   if (_assinatura == null)
@@ -481,6 +545,38 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
                                 '${_assinatura!.aulasRealizadas}'),
                             _InfoRow('Reposições disponíveis',
                                 '${_assinatura!.reposicoesDisponiveis}'),
+                            const Divider(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Vencimento',
+                                  style:
+                                      TextStyle(color: AppColors.textSecondary),
+                                ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      DateFormatter.data(
+                                          _assinatura!.dataRenovacao),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    GestureDetector(
+                                      onTap: _salvandoVencimento
+                                          ? null
+                                          : _editarVencimento,
+                                      child: const Icon(
+                                        Icons.edit_calendar_outlined,
+                                        size: 18,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),

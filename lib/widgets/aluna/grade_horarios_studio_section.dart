@@ -21,14 +21,25 @@ class _GradeHorariosStudioSectionState
     extends State<GradeHorariosStudioSection> {
   DateTime _diaSelecionado = DateTime.now();
   late DateTime _inicioSemana;
+  late DateTime _inicioSemanaBase;
 
-  /// Número máximo de slots exibidos na home (os demais ficam no bottom sheet).
   static const int _limiteHome = 3;
+  static const int _paginaInicial = 10000;
+  int _pageAtual = _paginaInicial;
+  late PageController _pageController;
 
   @override
   void initState() {
     super.initState();
-    _inicioSemana = _calcularInicioSemana(DateTime.now());
+    _inicioSemanaBase = _calcularInicioSemana(DateTime.now());
+    _inicioSemana = _inicioSemanaBase;
+    _pageController = PageController(initialPage: _paginaInicial);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   /// Segunda-feira da semana que contém [data].
@@ -38,21 +49,29 @@ class _GradeHorariosStudioSectionState
   }
 
   void _semanaAnterior() {
-    setState(() {
-      _inicioSemana = _inicioSemana.subtract(const Duration(days: 7));
-      // mantém o dia na nova semana
-      _diaSelecionado = _inicioSemana.add(
-        Duration(days: _diaSelecionado.weekday - 1),
-      );
-    });
+    _pageController.animateToPage(
+      _pageAtual - 1,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _proximaSemana() {
+    _pageController.animateToPage(
+      _pageAtual + 1,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _onPageChanged(int page) {
+    final offset = page - _paginaInicial;
+    final novoInicio = _inicioSemanaBase.add(Duration(days: offset * 7));
     setState(() {
-      _inicioSemana = _inicioSemana.add(const Duration(days: 7));
-      _diaSelecionado = _inicioSemana.add(
-        Duration(days: _diaSelecionado.weekday - 1),
-      );
+      _pageAtual = page;
+      _inicioSemana = novoInicio;
+      _diaSelecionado =
+          novoInicio.add(Duration(days: _diaSelecionado.weekday - 1));
     });
   }
 
@@ -140,75 +159,91 @@ class _GradeHorariosStudioSectionState
                     ),
                   ),
 
-                  // Faixa de dias da semana
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: _diasDaSemana.map((dia) {
-                        final eHoje = _eHoje(dia);
-                        final eSelecionado = _mesmoDia(dia, _diaSelecionado);
-                        final temSlot = gradeProvider.slots.any((s) =>
-                            s.dataHora.year == dia.year &&
-                            s.dataHora.month == dia.month &&
-                            s.dataHora.day == dia.day);
+                  // Faixa de dias da semana (PageView para swipe nativo)
+                  SizedBox(
+                    height: 72,
+                    child: PageView.builder(
+                      controller: _pageController,
+                      onPageChanged: _onPageChanged,
+                      itemBuilder: (context, page) {
+                        final offset = page - _paginaInicial;
+                        final inicioSemana =
+                            _inicioSemanaBase.add(Duration(days: offset * 7));
+                        final dias = List.generate(
+                            7, (i) => inicioSemana.add(Duration(days: i)));
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: dias.map((dia) {
+                              final eHoje = _eHoje(dia);
+                              final eSelecionado =
+                                  _mesmoDia(dia, _diaSelecionado);
+                              final temSlot = gradeProvider.slots.any((s) =>
+                                  s.dataHora.year == dia.year &&
+                                  s.dataHora.month == dia.month &&
+                                  s.dataHora.day == dia.day);
 
-                        return GestureDetector(
-                          onTap: () => setState(() => _diaSelecionado = dia),
-                          child: Container(
-                            width: 42,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              color: eSelecionado
-                                  ? AppColors.primary
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  _abrevDia(dia.weekday),
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: eSelecionado
-                                        ? Colors.white
-                                        : AppColors.textSecondary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  dia.day.toString(),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: eSelecionado
-                                        ? Colors.white
-                                        : eHoje
-                                            ? AppColors.primary
-                                            : AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                // Ponto indicador de que tem aula neste dia
-                                Container(
-                                  width: 5,
-                                  height: 5,
+                              return GestureDetector(
+                                onTap: () =>
+                                    setState(() => _diaSelecionado = dia),
+                                child: Container(
+                                  width: 42,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 8),
                                   decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: temSlot
-                                        ? (eSelecionado
-                                            ? Colors.white
-                                                .withValues(alpha: 0.8)
-                                            : AppColors.secondary)
+                                    color: eSelecionado
+                                        ? AppColors.primary
                                         : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        _abrevDia(dia.weekday),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: eSelecionado
+                                              ? Colors.white
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        dia.day.toString(),
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: eSelecionado
+                                              ? Colors.white
+                                              : eHoje
+                                                  ? AppColors.primary
+                                                  : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: temSlot
+                                              ? (eSelecionado
+                                                  ? Colors.white
+                                                      .withValues(alpha: 0.8)
+                                                  : AppColors.secondary)
+                                              : Colors.transparent,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           ),
                         );
-                      }).toList(),
+                      },
                     ),
                   ),
 
