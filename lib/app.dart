@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants/routes.dart';
 import 'models/grade_horario.dart';
 import 'models/plano.dart';
@@ -44,6 +45,15 @@ class App extends StatelessWidget {
       title: 'Fênix Pole Dance',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('pt', 'BR'),
+        Locale('en', 'US'),
+      ],
       initialRoute: Routes.splash,
       routes: {
         Routes.splash: (context) => const SplashScreen(),
