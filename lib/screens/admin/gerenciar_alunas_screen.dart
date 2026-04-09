@@ -151,8 +151,20 @@ class _GerenciarAlunasScreenState extends State<GerenciarAlunasScreen> {
         aluna: aluna,
         assinaturaRepo: _assinaturaRepo,
         horarioFixoRepo: _horarioFixoRepo,
+        onAlunaExcluida: _removerAlunaDaLista,
       ),
     );
+  }
+
+  void _removerAlunaDaLista(String alunaId) {
+    setState(() {
+      _alunas.removeWhere((aluna) => aluna.id == alunaId);
+      _alunasFiltradas = _alunas.where((aluna) {
+        final termo = _buscaController.text.toLowerCase();
+        return aluna.nome.toLowerCase().contains(termo) ||
+            aluna.email.toLowerCase().contains(termo);
+      }).toList();
+    });
   }
 }
 
@@ -229,11 +241,13 @@ class _AlunaDetalhesSheet extends StatefulWidget {
   final Usuario aluna;
   final AssinaturaRepository assinaturaRepo;
   final HorarioFixoRepository horarioFixoRepo;
+  final void Function(String alunaId) onAlunaExcluida;
 
   const _AlunaDetalhesSheet({
     required this.aluna,
     required this.assinaturaRepo,
     required this.horarioFixoRepo,
+    required this.onAlunaExcluida,
   });
 
   @override
@@ -379,6 +393,7 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
       final fn = FirebaseFunctions.instanceFor(region: 'southamerica-east1')
           .httpsCallable('excluirAluna');
       await fn.call({'alunaId': widget.aluna.id});
+      widget.onAlunaExcluida(widget.aluna.id);
 
       if (mounted) {
         Navigator.of(context).pop(); // fecha loading

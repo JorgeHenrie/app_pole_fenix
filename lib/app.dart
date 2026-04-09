@@ -28,12 +28,9 @@ import 'screens/admin/gerenciar_aulas_screen.dart';
 import 'screens/admin/gerenciar_alunas_screen.dart';
 import 'screens/admin/pagamentos_screen.dart';
 import 'screens/admin/eventos_admin_screen.dart';
-import 'screens/admin/aprovar_solicitacoes_screen.dart';
-import 'screens/admin/validar_atestados_screen.dart';
 import 'screens/admin/visualizar_ocupacao_screen.dart';
 import 'screens/admin/gerenciar_planos_screen.dart';
 import 'screens/admin/aprovar_cadastros_screen.dart';
-import 'screens/admin/importar_alunas_screen.dart';
 import 'screens/auth/primeiro_acesso_screen.dart';
 
 class App extends StatelessWidget {
@@ -76,9 +73,6 @@ class App extends StatelessWidget {
         Routes.eventosAdmin: (context) => const EventosAdminScreen(),
         Routes.meusHorarios: (context) => const MeusHorariosScreen(),
         Routes.minhasReposicoes: (context) => const MinhasReposicoesScreen(),
-        Routes.aprovarSolicitacoes: (context) =>
-            const AprovarSolicitacoesScreen(),
-        Routes.validarAtestados: (context) => const ValidarAtestadosScreen(),
         // Contratação de plano
         Routes.contratarPlano: (context) => const ContratarPlanoScreen(),
         Routes.selecionarHorarios: (context) {
@@ -106,7 +100,6 @@ class App extends StatelessWidget {
         Routes.gerenciarPlanos: (context) => const GerenciarPlanosScreen(),
         Routes.aprovarCadastros: (context) => const AprovarCadastrosScreen(),
         Routes.notificacoes: (context) => const NotificacoesScreen(),
-        Routes.importarAlunas: (context) => const ImportarAlunasScreen(),
         Routes.primeiroAcesso: (context) => const PrimeiroAcessoScreen(),
       },
     );

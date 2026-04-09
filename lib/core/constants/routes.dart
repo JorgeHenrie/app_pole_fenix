@@ -18,9 +18,7 @@ class Routes {
   static const String eventosAdmin = '/eventos-admin';
   static const String meusHorarios = '/meus-horarios';
   static const String minhasReposicoes = '/minhas-reposicoes';
-  static const String aprovarSolicitacoes = '/aprovar-solicitacoes';
   static const String aprovarCadastros = '/admin/aprovar-cadastros';
-  static const String validarAtestados = '/validar-atestados';
 
   // Contratação de plano
   static const String contratarPlano = '/contratar-plano';
@@ -36,9 +34,6 @@ class Routes {
 
   // Notificações
   static const String notificacoes = '/notificacoes';
-
-  // Admin – importação
-  static const String importarAlunas = '/admin/importar-alunas';
 
   // Primeiro acesso (alunas importadas)
   static const String primeiroAcesso = '/primeiro-acesso';

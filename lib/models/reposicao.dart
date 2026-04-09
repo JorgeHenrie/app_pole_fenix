@@ -40,28 +40,33 @@ class Reposicao {
     return diff < 0 ? 0 : diff;
   }
 
+  static DateTime _parseDate(dynamic raw) {
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is String) return DateTime.tryParse(raw) ?? DateTime.now();
+    return DateTime.now();
+  }
+
+  static DateTime? _parseDateNullable(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
+
   factory Reposicao.fromMap(Map<String, dynamic> mapa, String id) {
     return Reposicao(
       id: id,
       aulaOriginalId: mapa['aulaOriginalId'] as String,
       alunaId: mapa['alunaId'] as String,
-      novaDataHora: mapa['novaDataHora'] != null
-          ? DateTime.parse(mapa['novaDataHora'] as String)
-          : null,
+      novaDataHora: _parseDateNullable(mapa['novaDataHora']),
       novoHorarioId: mapa['novoHorarioId'] as String?,
       status: mapa['status'] as String,
       motivoOriginal: mapa['motivoOriginal'] as String,
       atestadoValidado: mapa['atestadoValidado'] as bool?,
-      criadaEm: DateTime.parse(mapa['criadaEm'] as String),
-      expiraEm: mapa['expiraEm'] != null
-          ? DateTime.parse(mapa['expiraEm'] as String)
-          : null,
-      agendadaEm: mapa['agendadaEm'] != null
-          ? DateTime.parse(mapa['agendadaEm'] as String)
-          : null,
-      realizadaEm: mapa['realizadaEm'] != null
-          ? DateTime.parse(mapa['realizadaEm'] as String)
-          : null,
+      criadaEm: _parseDate(mapa['criadaEm']),
+      expiraEm: _parseDateNullable(mapa['expiraEm']),
+      agendadaEm: _parseDateNullable(mapa['agendadaEm']),
+      realizadaEm: _parseDateNullable(mapa['realizadaEm']),
     );
   }
 
@@ -71,23 +76,15 @@ class Reposicao {
       id: doc.id,
       aulaOriginalId: mapa['aulaOriginalId'] as String,
       alunaId: mapa['alunaId'] as String,
-      novaDataHora: mapa['novaDataHora'] != null
-          ? (mapa['novaDataHora'] as Timestamp).toDate()
-          : null,
+      novaDataHora: _parseDateNullable(mapa['novaDataHora']),
       novoHorarioId: mapa['novoHorarioId'] as String?,
       status: mapa['status'] as String,
       motivoOriginal: mapa['motivoOriginal'] as String,
       atestadoValidado: mapa['atestadoValidado'] as bool?,
-      criadaEm: (mapa['criadaEm'] as Timestamp).toDate(),
-      expiraEm: mapa['expiraEm'] != null
-          ? (mapa['expiraEm'] as Timestamp).toDate()
-          : null,
-      agendadaEm: mapa['agendadaEm'] != null
-          ? (mapa['agendadaEm'] as Timestamp).toDate()
-          : null,
-      realizadaEm: mapa['realizadaEm'] != null
-          ? (mapa['realizadaEm'] as Timestamp).toDate()
-          : null,
+      criadaEm: _parseDate(mapa['criadaEm']),
+      expiraEm: _parseDateNullable(mapa['expiraEm']),
+      agendadaEm: _parseDateNullable(mapa['agendadaEm']),
+      realizadaEm: _parseDateNullable(mapa['realizadaEm']),
     );
   }
 

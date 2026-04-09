@@ -17,8 +17,7 @@ class VisualizarOcupacaoScreen extends StatefulWidget {
       _VisualizarOcupacaoScreenState();
 }
 
-class _VisualizarOcupacaoScreenState
-    extends State<VisualizarOcupacaoScreen> {
+class _VisualizarOcupacaoScreenState extends State<VisualizarOcupacaoScreen> {
   final GradeHorarioRepository _gradeRepo = GradeHorarioRepository();
   final HorarioFixoRepository _horarioFixoRepo = HorarioFixoRepository();
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
@@ -157,10 +156,7 @@ class _VisualizarOcupacaoScreenState
 
   @override
   Widget build(BuildContext context) {
-    final diasComHorarios = _grade
-        .map((g) => g.diaSemana)
-        .toSet()
-        .toList()
+    final diasComHorarios = _grade.map((g) => g.diaSemana).toSet().toList()
       ..sort();
 
     return Scaffold(
@@ -192,66 +188,98 @@ class _VisualizarOcupacaoScreenState
                           .toList()
                         ..sort((a, b) => a.horario.compareTo(b.horario));
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Text(
-                              _diasSemana[dia] ?? 'Dia $dia',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary,
-                                  ),
-                            ),
-                          ),
-                          ...horariosHoje.map((grade) {
-                            final vagasOcupadas = _ocupacao[
-                                    '${grade.diaSemana}_${grade.horario}'] ??
-                                0;
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                              child: ListTile(
-                                leading: CircleAvatar(
-                                  backgroundColor: _corOcupacao(grade),
-                                  foregroundColor: Colors.white,
-                                  child: Text(
-                                    '$vagasOcupadas/${grade.capacidadeMaxima}',
-                                    style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                title: Text(
-                                  '${grade.horario} — ${grade.modalidade}',
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                subtitle: Text(
-                                  vagasOcupadas >= grade.capacidadeMaxima
-                                      ? 'Lotado'
-                                      : '${grade.capacidadeMaxima - vagasOcupadas} vaga(s) disponível(is)',
-                                  style: TextStyle(
-                                    color: _corOcupacao(grade),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                trailing: const Icon(Icons.arrow_forward_ios,
-                                    size: 16, color: AppColors.grey),
-                                onTap: () => _verAlunas(grade),
-                              ),
-                            );
-                          }),
-                        ],
+                      return _DiaOcupacaoExpansionSection(
+                        dia: _diasSemana[dia] ?? 'Dia $dia',
+                        horarios: horariosHoje,
+                        ocupacao: _ocupacao,
+                        corOcupacao: _corOcupacao,
+                        onTapHorario: _verAlunas,
                       );
                     },
                   ),
                 ),
+    );
+  }
+}
+
+class _DiaOcupacaoExpansionSection extends StatelessWidget {
+  final String dia;
+  final List<GradeHorario> horarios;
+  final Map<String, int> ocupacao;
+  final Color Function(GradeHorario) corOcupacao;
+  final void Function(GradeHorario) onTapHorario;
+
+  const _DiaOcupacaoExpansionSection({
+    required this.dia,
+    required this.horarios,
+    required this.ocupacao,
+    required this.corOcupacao,
+    required this.onTapHorario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1,
+      child: ExpansionTile(
+        title: Text(
+          dia,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+        ),
+        children: horarios.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Nenhum horário cadastrado para este dia.'),
+                ),
+              ]
+            : horarios.map((grade) {
+                final vagasOcupadas =
+                    ocupacao['${grade.diaSemana}_${grade.horario}'] ?? 0;
+                return Card(
+                  margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: corOcupacao(grade),
+                      foregroundColor: Colors.white,
+                      child: Text(
+                        '$vagasOcupadas/${grade.capacidadeMaxima}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      '${grade.horario} — ${grade.modalidade}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      vagasOcupadas >= grade.capacidadeMaxima
+                          ? 'Lotado'
+                          : '${grade.capacidadeMaxima - vagasOcupadas} vaga(s) disponível(is)',
+                      style: TextStyle(
+                        color: corOcupacao(grade),
+                        fontSize: 12,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: AppColors.grey,
+                    ),
+                    onTap: () => onTapHorario(grade),
+                  ),
+                );
+              }).toList(),
+      ),
     );
   }
 }

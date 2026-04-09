@@ -177,6 +177,7 @@ class _GradeHorariosStudioSectionState
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: dias.map((dia) {
                               final eHoje = _eHoje(dia);
+                              final diaPassado = _diaJaPassou(dia);
                               final eSelecionado =
                                   _mesmoDia(dia, _diaSelecionado);
                               final temSlot = gradeProvider.slots.any((s) =>
@@ -194,7 +195,10 @@ class _GradeHorariosStudioSectionState
                                   decoration: BoxDecoration(
                                     color: eSelecionado
                                         ? AppColors.primary
-                                        : Colors.transparent,
+                                        : diaPassado
+                                            ? Colors.grey
+                                                .withValues(alpha: 0.08)
+                                            : Colors.transparent,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Column(
@@ -206,7 +210,9 @@ class _GradeHorariosStudioSectionState
                                           fontWeight: FontWeight.w600,
                                           color: eSelecionado
                                               ? Colors.white
-                                              : AppColors.textSecondary,
+                                              : diaPassado
+                                                  ? AppColors.grey
+                                                  : AppColors.textSecondary,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -219,7 +225,9 @@ class _GradeHorariosStudioSectionState
                                               ? Colors.white
                                               : eHoje
                                                   ? AppColors.primary
-                                                  : AppColors.textPrimary,
+                                                  : diaPassado
+                                                      ? AppColors.grey
+                                                      : AppColors.textPrimary,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -232,7 +240,11 @@ class _GradeHorariosStudioSectionState
                                               ? (eSelecionado
                                                   ? Colors.white
                                                       .withValues(alpha: 0.8)
-                                                  : AppColors.secondary)
+                                                  : diaPassado
+                                                      ? AppColors.grey
+                                                          .withValues(
+                                                              alpha: 0.5)
+                                                      : AppColors.secondary)
                                               : Colors.transparent,
                                         ),
                                       ),
@@ -584,6 +596,13 @@ class _GradeHorariosStudioSectionState
   static bool _eHoje(DateTime d) {
     final agora = DateTime.now();
     return d.year == agora.year && d.month == agora.month && d.day == agora.day;
+  }
+
+  static bool _diaJaPassou(DateTime d) {
+    final hoje = DateTime.now();
+    final data = DateTime(d.year, d.month, d.day);
+    final baseHoje = DateTime(hoje.year, hoje.month, hoje.day);
+    return data.isBefore(baseHoje);
   }
 
   static bool _mesmoDia(DateTime a, DateTime b) =>
@@ -1118,6 +1137,9 @@ class _BottomSheetTodosDoDia extends StatelessWidget {
       DateFormat("EEEE, dd 'de' MMMM", 'pt_BR').format(dia),
     );
     final total = slots.length;
+    final diaPassado = DateTime(dia.year, dia.month, dia.day).isBefore(
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+    );
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -1164,7 +1186,9 @@ class _BottomSheetTodosDoDia extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$total horário${total == 1 ? '' : 's'} disponível${total == 1 ? '' : 'is'}',
+                          diaPassado
+                              ? '$total aula${total == 1 ? '' : 's'} realizada${total == 1 ? '' : 's'} neste dia'
+                              : '$total horário${total == 1 ? '' : 's'} disponível${total == 1 ? '' : 'is'}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,

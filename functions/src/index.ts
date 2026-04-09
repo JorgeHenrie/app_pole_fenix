@@ -14,17 +14,23 @@ const db = admin.firestore();
 export const darBaixaDiariaAulas = onSchedule(
   {
     schedule: "0 0 * * *",
-    timeZone: "America/Sao_Paulo",
+    timeZone: "America/Boa_Vista",
     region: "southamerica-east1",
   },
   async () => {
-    const agora = new Date().toISOString();
+    // Roraima usa UTC-4 fixo (sem horário de verão).
+    // O app salva dataHora como ISO sem sufixo Z (horário local),
+    // por isso subtraímos 4h do UTC para obter a string comparável.
+    const agoraUtc = new Date();
+    const agoraRR = new Date(agoraUtc.getTime() - 4 * 60 * 60 * 1000)
+      .toISOString()
+      .replace("Z", "");
 
     // 1. Buscar todas as aulas agendadas com dataHora no passado
     const aulasSnap = await db
       .collection("aulas")
       .where("status", "==", "agendada")
-      .where("dataHora", "<", agora)
+      .where("dataHora", "<", agoraRR)
       .get();
 
     if (aulasSnap.empty) {

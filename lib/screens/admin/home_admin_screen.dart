@@ -1,4 +1,3 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -95,47 +94,14 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
           ),
           _buildMenuCard(
             context,
-            icon: Icons.swap_horiz,
-            title: 'Aprovar Solicitações',
-            subtitle: 'Aprovar mudanças de horário fixo',
-            color: const Color(0xFF7B1FA2),
-            rota: Routes.aprovarSolicitacoes,
-          ),
-          _buildMenuCard(
-            context,
-            icon: Icons.medical_services,
-            title: 'Validar Atestados',
-            subtitle: 'Validar atestados médicos de faltas',
-            color: AppColors.warning,
-            rota: Routes.validarAtestados,
-          ),
-          _buildMenuCard(
-            context,
             icon: Icons.credit_card,
             title: 'Gerenciar Planos',
             subtitle: 'Criar e editar planos de assinatura',
             color: const Color(0xFF2E7D32),
             rota: Routes.gerenciarPlanos,
           ),
-          _buildMenuCard(
-            context,
-            icon: Icons.table_chart,
-            title: 'Importar Alunas da Planilha',
-            subtitle: 'Importação única dos dados do Excel',
-            color: const Color(0xFF37474F),
-            rota: Routes.importarAlunas,
-          ),
-          _buildSincronizarCard(context),
           const SizedBox(height: 8),
           _buildSectionTitle(context, 'Gestão'),
-          _buildMenuCard(
-            context,
-            icon: Icons.fitness_center,
-            title: 'Gerenciar Aulas',
-            subtitle: 'Ver e editar aulas agendadas',
-            color: const Color(0xFF00897B),
-            rota: Routes.gerenciarAulas,
-          ),
           _buildMenuCard(
             context,
             icon: Icons.payment,
@@ -153,88 +119,6 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             rota: Routes.eventosAdmin,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSincronizarCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.red.shade50,
-      child: ListTile(
-        onTap: () async {
-          final confirmado = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Corrigir alunas excluídas'),
-              content: const Text(
-                'Isso irá bloquear o acesso ao app de todas as alunas que '
-                'foram excluídas, desativar os horários fixos delas e '
-                'cancelar suas assinaturas ativas.\n\n'
-                'Deseja continuar?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancelar'),
-                ),
-                TextButton(
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Corrigir'),
-                ),
-              ],
-            ),
-          );
-          if (confirmado != true || !context.mounted) return;
-
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const Center(child: CircularProgressIndicator()),
-          );
-
-          try {
-            final fn =
-                FirebaseFunctions.instanceFor(region: 'southamerica-east1')
-                    .httpsCallable('sincronizarInativas');
-            final result = await fn.call();
-            final corrigidas = result.data['corrigidas'] as int? ?? 0;
-
-            if (context.mounted) {
-              Navigator.of(context).pop(); // fecha loading
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content:
-                      Text('$corrigidas aluna(s) corrigida(s) com sucesso.'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-          } catch (e) {
-            if (context.mounted) {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Erro: $e')),
-              );
-            }
-          }
-        },
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Icon(Icons.sync_problem, color: Colors.red),
-        ),
-        title: const Text('Corrigir Alunas Excluídas',
-            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
-        subtitle: const Text('Bloqueia acesso e libera horários das inativas',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }
@@ -286,7 +170,6 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       child: ListTile(
         onTap: () async {
           await Navigator.pushNamed(context, rota);
-          // Atualiza o contador ao voltar da tela de aprovações
           if (rota == Routes.aprovarCadastros) {
             _carregarPendentes();
           }
@@ -301,9 +184,10 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
           child: Icon(icon, color: color),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle,
-            style:
-                const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

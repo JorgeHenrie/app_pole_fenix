@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../models/aula.dart';
 import '../models/assinatura.dart';
 import '../models/grade_horario.dart';
 import '../models/horario_fixo.dart';
@@ -34,6 +35,8 @@ class GradeHorarioProvider extends ChangeNotifier {
 
   List<SlotDia> _slots = [];
   List<Reposicao> _reposicoesPendentes = [];
+  Set<String> _slotsComAulaFixaDaAluna = {};
+  String? _primeiroNomeAluna;
 
   /// Horários fixos da aluna carregados para verificar inscrição nos slots.
   List<HorarioFixo> _horariosDaAluna = [];
@@ -66,6 +69,13 @@ class GradeHorarioProvider extends ChangeNotifier {
       _reposicoesPendentes = resultados[1] as List<Reposicao>;
       _horariosDaAluna = resultados[2] as List<HorarioFixo>;
 
+      final alunaDoc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(alunaId)
+          .get();
+      final nomeAluna = alunaDoc.data()?['nome'] as String? ?? '';
+      _primeiroNomeAluna = nomeAluna.trim().split(' ').first;
+
       final agora = DateTime.now();
       // Limita ao período do contrato vigente ou próximos 14 dias
       final contrato = assinatura?.dataRenovacao;
@@ -77,6 +87,12 @@ class GradeHorarioProvider extends ChangeNotifier {
       // desta semana (ex.: terça quando hoje é quarta) também sejam gerados.
       final inicioSemana =
           DateTime(agora.year, agora.month, agora.day - (agora.weekday - 1));
+
+      _slotsComAulaFixaDaAluna = await _buscarSlotsComAulaFixaDaAluna(
+        alunaId: alunaId,
+        inicio: inicioSemana,
+        limite: limite,
+      );
 
       grade.sort((a, b) {
         final d = a.diaSemana.compareTo(b.diaSemana);
@@ -105,13 +121,13 @@ class GradeHorarioProvider extends ChangeNotifier {
         DateTime cursor = _proximaOcorrencia(g.diaSemana, inicioSemana);
 
         while (cursor.isBefore(limite) || _mesmoDia(cursor, limite)) {
-          final partes = g.horario.split(':');
+          final partes = _extrairHorarioInicio(g.horario);
           final dataHora = DateTime(
             cursor.year,
             cursor.month,
             cursor.day,
-            int.parse(partes[0]),
-            int.parse(partes[1]),
+            partes.$1,
+            partes.$2,
           );
 
           // Inclui todos os slots da semana atual (mesmo passados) e futuros
@@ -125,6 +141,16 @@ class GradeHorarioProvider extends ChangeNotifier {
               debugPrint('buscarNomesReposicoesPorSlot erro: $e');
             }
             final todos = [...nomesFixos, ...nomesRepo];
+            final slotKey = _chaveSlot(g.diaSemana, g.horario, dataHora);
+
+            if (_deveOcultarAlunaNoSlot(g, dataHora, agora, slotKey)) {
+              final primeiroNome = _primeiroNomeAluna?.toLowerCase();
+              if (primeiroNome != null && primeiroNome.isNotEmpty) {
+                todos.removeWhere(
+                  (nome) => nome.trim().toLowerCase() == primeiroNome,
+                );
+              }
+            }
 
             slots.add(SlotDia(
               gradeHorario: g,
@@ -146,6 +172,52 @@ class GradeHorarioProvider extends ChangeNotifier {
       _carregando = false;
       notifyListeners();
     }
+  }
+
+  Future<Set<String>> _buscarSlotsComAulaFixaDaAluna({
+    required String alunaId,
+    required DateTime inicio,
+    required DateTime limite,
+  }) async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('aulas')
+        .where('alunaId', isEqualTo: alunaId)
+        .get();
+
+    final horariosPorId = {
+      for (final horario in _horariosDaAluna) horario.id: horario,
+    };
+
+    final slots = <String>{};
+
+    for (final doc in snapshot.docs) {
+      final aula = Aula.fromFirestore(doc);
+      if (aula.horarioFixoId == null) continue;
+      if (aula.status == 'cancelada') continue;
+
+      final horario = horariosPorId[aula.horarioFixoId!];
+      if (horario == null) continue;
+      if (aula.dataHora.isBefore(inicio)) continue;
+      if (aula.dataHora.isAfter(limite)) continue;
+
+      slots.add(_chaveSlot(horario.diaSemana, horario.horario, aula.dataHora));
+    }
+
+    return slots;
+  }
+
+  bool _deveOcultarAlunaNoSlot(
+    GradeHorario grade,
+    DateTime dataHora,
+    DateTime agora,
+    String slotKey,
+  ) {
+    final ehHorarioDaAluna = _horariosDaAluna.any(
+      (h) => h.diaSemana == grade.diaSemana && h.horario == grade.horario,
+    );
+
+    if (!ehHorarioDaAluna) return false;
+    return !_slotsComAulaFixaDaAluna.contains(slotKey);
   }
 
   /// Retorna true se a aluna pode agendar uma reposição neste slot.
@@ -217,18 +289,27 @@ class GradeHorarioProvider extends ChangeNotifier {
 
   /// Retorna true se a aluna tem um horário fixo que corresponde a este slot.
   bool alunaEstaInscrita(SlotDia slot) {
-    return _horariosDaAluna.any((h) =>
-        h.diaSemana == slot.gradeHorario.diaSemana &&
-        h.horario == slot.gradeHorario.horario);
+    final horario = horarioFixoParaSlot(slot);
+    return horario != null;
   }
 
   /// Retorna o HorarioFixo da aluna para este slot, se existir.
   HorarioFixo? horarioFixoParaSlot(SlotDia slot) {
-    return _horariosDaAluna
+    final horario = _horariosDaAluna
         .where((h) =>
             h.diaSemana == slot.gradeHorario.diaSemana &&
             h.horario == slot.gradeHorario.horario)
         .firstOrNull;
+
+    if (horario == null) return null;
+
+    final slotKey = _chaveSlot(
+      slot.gradeHorario.diaSemana,
+      slot.gradeHorario.horario,
+      slot.dataHora,
+    );
+
+    return _slotsComAulaFixaDaAluna.contains(slotKey) ? horario : null;
   }
 
   /// Cancela uma ocorrência específica da aula da aluna e cria uma Reposição
@@ -333,12 +414,38 @@ class GradeHorarioProvider extends ChangeNotifier {
     _slots = [];
     _reposicoesPendentes = [];
     _horariosDaAluna = [];
+    _slotsComAulaFixaDaAluna = {};
+    _primeiroNomeAluna = null;
     _erro = null;
     notifyListeners();
+  }
+
+  static (int, int) _extrairHorarioInicio(String horario) {
+    final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(horario);
+    if (match == null) return (0, 0);
+    return (
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+    );
+  }
+
+  static DateTime _dataHoraDoSlot(DateTime dataBase, String horario) {
+    final inicio = _extrairHorarioInicio(horario);
+    return DateTime(
+      dataBase.year,
+      dataBase.month,
+      dataBase.day,
+      inicio.$1,
+      inicio.$2,
+    );
   }
 
   static bool _podeEntrarNoSlot(DateTime dataHoraInicio) {
     // Permite agendar reposição até o horário de início da aula.
     return DateTime.now().isBefore(dataHoraInicio);
+  }
+
+  static String _chaveSlot(int diaSemana, String horario, DateTime dataHora) {
+    return '$diaSemana|$horario|${dataHora.toIso8601String()}';
   }
 }

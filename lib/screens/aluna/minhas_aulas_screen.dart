@@ -4,8 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/aula.dart';
+import '../../models/reposicao.dart';
 import '../../providers/auth_provider.dart';
 import '../../repositories/aula_repository.dart';
+import '../../repositories/grade_horario_repository.dart';
+import '../../repositories/reposicao_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela com o histórico completo de aulas da aluna.
@@ -18,7 +21,11 @@ class MinhasAulasScreen extends StatefulWidget {
 
 class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
   final AulaRepository _aulaRepository = AulaRepository();
-  List<Aula> _aulas = [];
+  final ReposicaoRepository _reposicaoRepository = ReposicaoRepository();
+  final GradeHorarioRepository _gradeHorarioRepository =
+      GradeHorarioRepository();
+
+  List<_HistoricoAulaRealizada> _aulas = [];
   bool _carregando = true;
   String? _erro;
 
@@ -36,21 +43,89 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
       _erro = null;
     });
     try {
-      final aulas = await _aulaRepository.buscarHistoricoPorAluna(usuario.id);
-      setState(() => _aulas = aulas);
-    } catch (e) {
+      final resultados = await Future.wait([
+        _aulaRepository.buscarHistoricoPorAluna(usuario.id),
+        _reposicaoRepository.buscarPorAluna(usuario.id),
+      ]);
+
+      final aulas = resultados[0] as List<Aula>;
+      final reposicoes = resultados[1] as List<Reposicao>;
+
+      final historico = await _montarHistoricoRealizado(aulas, reposicoes);
+      setState(() => _aulas = historico);
+    } catch (e, stack) {
+      debugPrint('[MinhasAulas] Erro: $e\n$stack');
       setState(() => _erro = 'Erro ao carregar aulas. Tente novamente.');
     } finally {
       setState(() => _carregando = false);
     }
   }
 
-  int get _aulasRealizadas =>
-      _aulas.where((a) => a.status == 'realizada').length;
-  int get _faltas => _aulas.where((a) => a.status == 'falta').length;
+  Future<List<_HistoricoAulaRealizada>> _montarHistoricoRealizado(
+    List<Aula> aulas,
+    List<Reposicao> reposicoes,
+  ) async {
+    final agora = DateTime.now();
+    final historico = <_HistoricoAulaRealizada>[];
 
-  Map<String, List<Aula>> get _aulasPorMes {
-    final mapa = <String, List<Aula>>{};
+    final aulasRealizadas = aulas.where((aula) => aula.status == 'realizada');
+    for (final aula in aulasRealizadas) {
+      historico.add(
+        _HistoricoAulaRealizada(
+          id: aula.id,
+          modalidade: aula.titulo ?? aula.modalidade,
+          dataHora: aula.dataHora,
+          origem: _OrigemAula.plano,
+        ),
+      );
+    }
+
+    final reposicoesConcluidas = reposicoes.where(
+      (reposicao) =>
+          reposicao.novaDataHora != null &&
+          (reposicao.status == 'realizada' ||
+              (reposicao.status == 'agendada' &&
+                  !agora.isBefore(reposicao.novaDataHora!))),
+    );
+
+    final horarioIds = reposicoesConcluidas
+        .map((reposicao) => reposicao.novoHorarioId)
+        .whereType<String>()
+        .toSet();
+
+    final modalidadesPorHorarioId = <String, String>{};
+    await Future.wait(horarioIds.map((horarioId) async {
+      final grade = await _gradeHorarioRepository.buscarPorId(horarioId);
+      if (grade != null) {
+        modalidadesPorHorarioId[horarioId] = grade.modalidade;
+      }
+    }));
+
+    for (final reposicao in reposicoesConcluidas) {
+      final dataHora = reposicao.novaDataHora!;
+      historico.add(
+        _HistoricoAulaRealizada(
+          id: reposicao.id,
+          modalidade:
+              modalidadesPorHorarioId[reposicao.novoHorarioId] ?? 'Reposição',
+          dataHora: dataHora,
+          origem: _OrigemAula.reposicao,
+        ),
+      );
+    }
+
+    historico.sort((a, b) => b.dataHora.compareTo(a.dataHora));
+    return historico;
+  }
+
+  int get _aulasRealizadas => _aulas.length;
+  int get _aulasPlano =>
+      _aulas.where((a) => a.origem == _OrigemAula.plano).length;
+  int get _reposicoesRealizadas =>
+      _aulas.where((a) => a.origem == _OrigemAula.reposicao).length;
+
+  Map<String, List<_HistoricoAulaRealizada>> get _aulasPorMes {
+    final mapa = <String, List<_HistoricoAulaRealizada>>{};
     for (final aula in _aulas) {
       final chave = DateFormatter.mesAno(aula.dataHora);
       mapa.putIfAbsent(chave, () => []).add(aula);
@@ -114,7 +189,7 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
             Icon(Icons.fitness_center, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              'Nenhuma aula encontrada',
+              'Nenhuma aula realizada encontrada',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.grey.shade600,
                   ),
@@ -153,12 +228,14 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
       ),
       child: Row(
         children: [
-          Expanded(child: _buildStat('Total', _aulas.length.toString())),
-          Container(width: 1, height: 48, color: Colors.white24),
           Expanded(
               child: _buildStat('Realizadas', _aulasRealizadas.toString())),
           Container(width: 1, height: 48, color: Colors.white24),
-          Expanded(child: _buildStat('Faltas', _faltas.toString())),
+          Expanded(child: _buildStat('Plano', _aulasPlano.toString())),
+          Container(width: 1, height: 48, color: Colors.white24),
+          Expanded(
+              child:
+                  _buildStat('Reposições', _reposicoesRealizadas.toString())),
         ],
       ),
     );
@@ -185,7 +262,7 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
     );
   }
 
-  Widget _buildGrupoMes(String mes, List<Aula> aulas) {
+  Widget _buildGrupoMes(String mes, List<_HistoricoAulaRealizada> aulas) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -208,13 +285,13 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
 }
 
 class _AulaHistoricoCard extends StatelessWidget {
-  final Aula aula;
+  final _HistoricoAulaRealizada aula;
 
   const _AulaHistoricoCard({required this.aula});
 
   @override
   Widget build(BuildContext context) {
-    final (cor, icone, label) = _statusInfo(aula.status);
+    final (cor, icone, label) = _origemInfo(aula.origem);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -227,7 +304,7 @@ class _AulaHistoricoCard extends StatelessWidget {
           child: Icon(icone, color: cor, size: 20),
         ),
         title: Text(
-          aula.titulo ?? aula.modalidade,
+          aula.modalidade,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Column(
@@ -238,12 +315,6 @@ class _AulaHistoricoCard extends StatelessWidget {
               '${DateFormatter.data(aula.dataHora)} às ${DateFormatter.hora(aula.dataHora)}',
               style: const TextStyle(fontSize: 13),
             ),
-            if (aula.instrutora != null)
-              Text(
-                aula.instrutora!,
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
-              ),
           ],
         ),
         trailing: Container(
@@ -265,16 +336,30 @@ class _AulaHistoricoCard extends StatelessWidget {
     );
   }
 
-  (Color, IconData, String) _statusInfo(String status) {
-    return switch (status) {
-      'realizada' => (
+  (Color, IconData, String) _origemInfo(_OrigemAula origem) {
+    return switch (origem) {
+      _OrigemAula.plano => (
           AppColors.success,
           Icons.check_circle_outline,
-          'Realizada'
+          'Plano'
         ),
-      'cancelada' => (AppColors.error, Icons.cancel_outlined, 'Cancelada'),
-      'falta' => (AppColors.warning, Icons.warning_amber_outlined, 'Falta'),
-      _ => (AppColors.info, Icons.schedule, 'Agendada'),
+      _OrigemAula.reposicao => (AppColors.info, Icons.refresh, 'Reposição'),
     };
   }
+}
+
+enum _OrigemAula { plano, reposicao }
+
+class _HistoricoAulaRealizada {
+  final String id;
+  final String modalidade;
+  final DateTime dataHora;
+  final _OrigemAula origem;
+
+  const _HistoricoAulaRealizada({
+    required this.id,
+    required this.modalidade,
+    required this.dataHora,
+    required this.origem,
+  });
 }

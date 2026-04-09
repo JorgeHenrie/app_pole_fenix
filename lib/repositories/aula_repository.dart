@@ -20,7 +20,7 @@ class AulaRepository {
         .where('dataHora', isGreaterThanOrEqualTo: agora)
         .get();
     final aulas = snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .map((doc) => Aula.fromFirestore(doc))
         .where((a) => a.status == 'agendada')
         .toList()
       ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
@@ -39,7 +39,7 @@ class AulaRepository {
         .where('alunaId', isEqualTo: alunaId)
         .get();
     final aulas = snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .map((doc) => Aula.fromFirestore(doc))
         .where((a) => a.status == 'agendada' && a.dataHora.isAfter(agora))
         .toList()
       ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
@@ -62,7 +62,14 @@ class AulaRepository {
         .where('alunaId', isEqualTo: alunaId)
         .get();
     final aulas = snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .map((doc) {
+          try {
+            return Aula.fromFirestore(doc);
+          } catch (e) {
+            return null;
+          }
+        })
+        .whereType<Aula>()
         .toList()
       ..sort((a, b) => b.dataHora.compareTo(a.dataHora));
     return aulas;
@@ -74,9 +81,7 @@ class AulaRepository {
         .where('horarioFixoId', isEqualTo: horarioFixoId)
         .orderBy('dataHora')
         .get();
-    return snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
-        .toList();
+    return snapshot.docs.map((doc) => Aula.fromFirestore(doc)).toList();
   }
 
   Future<String> criar(Aula aula) async {
@@ -141,8 +146,12 @@ class AulaRepository {
         .get();
 
     final aulasPassadas = snapshot.docs.where((doc) {
-      final aula = Aula.fromMap(doc.data(), doc.id);
-      return aula.dataHora.isBefore(agora);
+      try {
+        final aula = Aula.fromFirestore(doc);
+        return aula.dataHora.isBefore(agora);
+      } catch (_) {
+        return false;
+      }
     }).toList();
 
     if (aulasPassadas.isEmpty) return 0;

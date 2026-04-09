@@ -33,6 +33,15 @@ class GradeHorario {
   }
 
   factory GradeHorario.fromMap(Map<String, dynamic> mapa, String id) {
+    final rawCriadoEm = mapa['criadoEm'];
+    final DateTime criadoEm;
+    if (rawCriadoEm is Timestamp) {
+      criadoEm = rawCriadoEm.toDate();
+    } else if (rawCriadoEm is String) {
+      criadoEm = DateTime.tryParse(rawCriadoEm) ?? DateTime.now();
+    } else {
+      criadoEm = DateTime.now();
+    }
     return GradeHorario(
       id: id,
       diaSemana: mapa['diaSemana'] as int,
@@ -40,7 +49,7 @@ class GradeHorario {
       capacidadeMaxima: mapa['capacidadeMaxima'] as int? ?? 3,
       modalidade: mapa['modalidade'] as String,
       ativo: mapa['ativo'] as bool,
-      criadoEm: DateTime.parse(mapa['criadoEm'] as String),
+      criadoEm: criadoEm,
     );
   }
 
