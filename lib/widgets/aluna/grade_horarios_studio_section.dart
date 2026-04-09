@@ -437,6 +437,28 @@ class _GradeHorariosStudioSectionState
     Reposicao reposicao,
     String nomeAluna,
   ) async {
+    if (_aulaJaComecou(slot.dataHora)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Essa aula ja foi realizada.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    if (!_podeEntrarNaAula(slot.dataHora)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('O agendamento encerra no horário de início da aula.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
     final df = DateFormat("EEEE, dd 'de' MMMM", 'pt_BR');
     final hora = DateFormat('HH:mm').format(slot.dataHora);
 
@@ -660,19 +682,24 @@ class _SlotTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     final hora = DateFormat('HH:mm').format(slot.dataHora);
     final esgotado = !slot.temVaga;
+    final aulaRealizada = _aulaJaComecou(slot.dataHora);
 
     // Cor do card baseada na modalidade (alterna entre variações)
-    final corCard = esgotado
-        ? Colors.grey.shade200
-        : (slot.gradeHorario.diaSemana % 2 == 0
-            ? AppColors.primaryLight.withValues(alpha: 0.15)
-            : AppColors.secondary.withValues(alpha: 0.12));
+    final corCard = aulaRealizada
+        ? Colors.grey.shade100
+        : esgotado
+            ? Colors.grey.shade200
+            : (slot.gradeHorario.diaSemana % 2 == 0
+                ? AppColors.primaryLight.withValues(alpha: 0.15)
+                : AppColors.secondary.withValues(alpha: 0.12));
 
-    final corAccent = esgotado
-        ? Colors.grey
-        : (slot.gradeHorario.diaSemana % 2 == 0
-            ? AppColors.primary
-            : AppColors.secondary);
+    final corAccent = aulaRealizada
+        ? AppColors.grey
+        : esgotado
+            ? Colors.grey
+            : (slot.gradeHorario.diaSemana % 2 == 0
+                ? AppColors.primary
+                : AppColors.secondary);
 
     return IntrinsicHeight(
       child: Row(
@@ -688,9 +715,11 @@ class _SlotTimeline extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: esgotado
-                        ? AppColors.textSecondary
-                        : AppColors.textPrimary,
+                    color: aulaRealizada
+                        ? AppColors.grey
+                        : esgotado
+                            ? AppColors.textSecondary
+                            : AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -719,7 +748,11 @@ class _SlotTimeline extends StatelessWidget {
                 height: 12,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: esgotado ? Colors.grey.shade400 : corAccent,
+                  color: aulaRealizada
+                      ? Colors.grey.shade400
+                      : esgotado
+                          ? Colors.grey.shade400
+                          : corAccent,
                 ),
               ),
               if (!isLast)
@@ -760,13 +793,32 @@ class _SlotTimeline extends StatelessWidget {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 15,
-                              color: esgotado
-                                  ? AppColors.textSecondary
-                                  : AppColors.textPrimary,
+                              color: aulaRealizada
+                                  ? AppColors.greyDark
+                                  : esgotado
+                                      ? AppColors.textSecondary
+                                      : AppColors.textPrimary,
                             ),
                           ),
                         ),
-                        if (esgotado)
+                        if (aulaRealizada)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.grey.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'REALIZADA',
+                              style: TextStyle(
+                                color: AppColors.greyDark,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        else if (esgotado)
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
@@ -804,32 +856,40 @@ class _SlotTimeline extends StatelessWidget {
                       children: [
                         Icon(Icons.people_outline,
                             size: 14,
-                            color: esgotado
+                            color: aulaRealizada
                                 ? Colors.grey
-                                : AppColors.textSecondary),
+                                : esgotado
+                                    ? Colors.grey
+                                    : AppColors.textSecondary),
                         const SizedBox(width: 4),
                         Text(
                           '${slot.ocupados}/${slot.gradeHorario.capacidadeMaxima}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: esgotado
+                            color: aulaRealizada
                                 ? Colors.grey
-                                : AppColors.textSecondary,
+                                : esgotado
+                                    ? Colors.grey
+                                    : AppColors.textSecondary,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          esgotado
-                              ? 'Sem vagas'
-                              : 'Restam ${slot.vagasDisponiveis} vaga${slot.vagasDisponiveis == 1 ? '' : 's'}',
+                          aulaRealizada
+                              ? 'Aula realizada'
+                              : esgotado
+                                  ? 'Sem vagas'
+                                  : 'Restam ${slot.vagasDisponiveis} vaga${slot.vagasDisponiveis == 1 ? '' : 's'}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: esgotado
-                                ? AppColors.error
-                                : slot.vagasDisponiveis == 1
-                                    ? AppColors.warning
-                                    : AppColors.success,
+                            color: aulaRealizada
+                                ? AppColors.greyDark
+                                : esgotado
+                                    ? AppColors.error
+                                    : slot.vagasDisponiveis == 1
+                                        ? AppColors.warning
+                                        : AppColors.success,
                           ),
                         ),
                       ],
@@ -842,17 +902,18 @@ class _SlotTimeline extends StatelessWidget {
                         slot.nomesMatriculados.join(' · '),
                         style: TextStyle(
                           fontSize: 11,
-                          color: esgotado
-                              ? Colors.grey.shade500
-                              : corAccent.withValues(alpha: 0.8),
+                          color: aulaRealizada
+                              ? Colors.grey.shade600
+                              : esgotado
+                                  ? Colors.grey.shade500
+                                  : corAccent.withValues(alpha: 0.8),
                           fontStyle: FontStyle.italic,
                         ),
                       ),
                     ],
 
                     // Botão de cancelar (aluna inscrita, aula não passou)
-                    if (alunaInscrita &&
-                        slot.dataHora.isAfter(DateTime.now())) ...[
+                    if (alunaInscrita && !aulaRealizada) ...[
                       const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
@@ -878,7 +939,7 @@ class _SlotTimeline extends StatelessWidget {
                     ],
 
                     // Botão de agendar reposição
-                    if (podeAgendar && reposicao != null) ...[
+                    if (!aulaRealizada && podeAgendar && reposicao != null) ...[
                       const SizedBox(height: 8),
                       SizedBox(
                         width: double.infinity,
@@ -1148,4 +1209,14 @@ class _BottomSheetTodosDoDia extends StatelessWidget {
 
   static String _capitalize(String s) =>
       s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+}
+
+/// Retorna true a partir do horário de início da aula.
+bool _aulaJaComecou(DateTime inicio) {
+  return !DateTime.now().isBefore(inicio);
+}
+
+bool _podeEntrarNaAula(DateTime inicio) {
+  // Permite agendar até o horário de início da aula.
+  return DateTime.now().isBefore(inicio);
 }

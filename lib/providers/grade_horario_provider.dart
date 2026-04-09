@@ -152,6 +152,7 @@ class GradeHorarioProvider extends ChangeNotifier {
   bool podeAgendar(SlotDia slot) {
     if (_reposicoesPendentes.isEmpty) return false;
     if (!slot.temVaga) return false;
+    if (!_podeEntrarNoSlot(slot.dataHora)) return false;
     return _reposicoesPendentes.any((r) =>
         !r.expirou &&
         (r.expiraEm == null || slot.dataHora.isBefore(r.expiraEm!)));
@@ -334,5 +335,10 @@ class GradeHorarioProvider extends ChangeNotifier {
     _horariosDaAluna = [];
     _erro = null;
     notifyListeners();
+  }
+
+  static bool _podeEntrarNoSlot(DateTime dataHoraInicio) {
+    // Permite agendar reposição até o horário de início da aula.
+    return DateTime.now().isBefore(dataHoraInicio);
   }
 }
