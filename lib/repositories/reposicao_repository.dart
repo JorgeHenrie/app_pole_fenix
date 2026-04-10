@@ -1,5 +1,6 @@
 import '../models/reposicao.dart';
 import '../services/firebase/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReposicaoRepository {
   static const String _colecao = 'reposicoes';
@@ -11,7 +12,14 @@ class ReposicaoRepository {
         .where('alunaId', isEqualTo: alunaId)
         .get();
     final reposicoes = snapshot.docs
-        .map((doc) => Reposicao.fromFirestore(doc))
+        .map((doc) {
+          try {
+            return Reposicao.fromFirestore(doc);
+          } catch (e) {
+            return null;
+          }
+        })
+        .whereType<Reposicao>()
         .toList()
       ..sort((a, b) => b.criadaEm.compareTo(a.criadaEm));
     return reposicoes;
@@ -55,9 +63,9 @@ class ReposicaoRepository {
       id: id,
       dados: {
         'status': 'agendada',
-        'novaDataHora': novaDataHora.toIso8601String(),
+        'novaDataHora': Timestamp.fromDate(novaDataHora),
         'novoHorarioId': novoHorarioId,
-        'agendadaEm': DateTime.now().toIso8601String(),
+        'agendadaEm': Timestamp.fromDate(DateTime.now()),
       },
     );
   }
@@ -68,7 +76,7 @@ class ReposicaoRepository {
       id: id,
       dados: {
         'status': 'realizada',
-        'realizadaEm': DateTime.now().toIso8601String(),
+        'realizadaEm': Timestamp.fromDate(DateTime.now()),
       },
     );
   }

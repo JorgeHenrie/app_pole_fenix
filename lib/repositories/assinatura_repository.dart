@@ -8,6 +8,17 @@ class AssinaturaRepository {
   static const String _colecao = 'assinaturas';
   final FirestoreService _firestore = FirestoreService();
 
+  Future<List<Assinatura>> listarAtivas() async {
+    final snapshot = await _firestore
+        .colecao(_colecao)
+        .where('status', isEqualTo: 'ativa')
+        .get();
+
+    return snapshot.docs
+        .map((doc) => Assinatura.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
   /// Busca a assinatura ativa de uma aluna.
   Future<Assinatura?> buscarAtivaDeAluna(String alunaId) async {
     final snapshot = await _firestore

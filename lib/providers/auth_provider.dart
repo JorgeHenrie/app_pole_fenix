@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../models/usuario.dart';
+import '../services/local/session_cache_service.dart';
 import '../services/firebase/auth_service.dart';
+import '../services/firebase/messaging_service.dart';
 import '../repositories/usuario_repository.dart';
 
 /// Estado de autenticação do app.
@@ -14,48 +17,108 @@ enum EstadoAuth { inicial, autenticado, naoAutenticado, carregando }
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final UsuarioRepository _usuarioRepository = UsuarioRepository();
+  final MessagingService _messagingService = MessagingService();
+  final SessionCacheService _sessionCacheService = SessionCacheService();
 
   EstadoAuth _estado = EstadoAuth.inicial;
   Usuario? _usuario;
   bool _carregando = false;
   String? _erro;
+  bool _sessaoInicializada = false;
 
   // Flag para evitar condição de corrida durante cadastro
   bool _cadastrando = false;
+  StreamSubscription<User?>? _authStateSubscription;
+  StreamSubscription<String>? _tokenRefreshSubscription;
+  String? _tokenNotificacaoAtual;
 
   EstadoAuth get estado => _estado;
   Usuario? get usuario => _usuario;
   bool get carregando => _carregando;
   String? get erro => _erro;
+  bool get sessaoInicializada => _sessaoInicializada;
   User? get usuarioFirebase => _authService.usuarioAtual;
   bool get estaAutenticado => _estado == EstadoAuth.autenticado;
 
   AuthProvider() {
-    _authService.estadoAutenticacao.listen(_onEstadoAlterado);
+    unawaited(_inicializarSessao());
   }
 
-  void _onEstadoAlterado(User? firebaseUser) async {
+  Future<void> _inicializarSessao() async {
+    final firebaseUser = _authService.usuarioAtual;
+    final usuarioCache = await _sessionCacheService.carregarUsuario();
+
+    if (firebaseUser == null) {
+      _usuario = null;
+      _estado = EstadoAuth.naoAutenticado;
+      await _sessionCacheService.limparUsuario();
+    } else {
+      _estado = EstadoAuth.autenticado;
+      if (usuarioCache != null && usuarioCache.id == firebaseUser.uid) {
+        _usuario = usuarioCache;
+      }
+      notifyListeners();
+      await _carregarDadosUsuario(
+        firebaseUser.uid,
+        usarCacheComoFallback: true,
+      );
+    }
+
+    _sessaoInicializada = true;
+    notifyListeners();
+
+    _authStateSubscription =
+        _authService.estadoAutenticacao.skip(1).listen((firebaseUser) {
+      unawaited(_onEstadoAlterado(firebaseUser));
+    });
+  }
+
+  Future<void> _onEstadoAlterado(User? firebaseUser) async {
     if (firebaseUser != null) {
       _estado = EstadoAuth.autenticado;
       notifyListeners();
-      // Só busca no Firestore se não houver dados do usuário atual
       if (!_cadastrando &&
           (_usuario == null || _usuario!.id != firebaseUser.uid)) {
-        await _carregarDadosUsuario(firebaseUser.uid);
+        final usuarioCache = await _sessionCacheService.carregarUsuario();
+        if (usuarioCache != null && usuarioCache.id == firebaseUser.uid) {
+          _usuario = usuarioCache;
+          notifyListeners();
+        }
+        await _carregarDadosUsuario(
+          firebaseUser.uid,
+          usarCacheComoFallback: true,
+        );
       }
     } else {
+      await _sessionCacheService.limparUsuario();
+      _tokenRefreshSubscription?.cancel();
+      _tokenRefreshSubscription = null;
+      _tokenNotificacaoAtual = null;
       _estado = EstadoAuth.naoAutenticado;
       _usuario = null;
       notifyListeners();
     }
   }
 
-  Future<void> _carregarDadosUsuario(String uid) async {
+  Future<void> _carregarDadosUsuario(
+    String uid, {
+    bool usarCacheComoFallback = false,
+  }) async {
     try {
-      _usuario = await _usuarioRepository.buscarPorId(uid);
+      final usuarioCarregado = await _usuarioRepository.buscarPorId(uid);
+      if (usuarioCarregado != null) {
+        _usuario = usuarioCarregado;
+        await _sessionCacheService.salvarUsuario(usuarioCarregado);
+        await _inicializarNotificacoes(uid);
+      } else if (!usarCacheComoFallback || _usuario?.id != uid) {
+        _usuario = null;
+        await _sessionCacheService.limparUsuario();
+      }
     } catch (e) {
       debugPrint('Erro ao carregar dados do usuário: $e');
-      _usuario = null;
+      if (!usarCacheComoFallback || _usuario?.id != uid) {
+        _usuario = null;
+      }
     }
     notifyListeners();
   }
@@ -66,7 +129,10 @@ class AuthProvider extends ChangeNotifier {
     try {
       final credencial = await _authService.login(email: email, senha: senha);
       if (credencial.user != null) {
-        await _carregarDadosUsuario(credencial.user!.uid);
+        await _carregarDadosUsuario(
+          credencial.user!.uid,
+          usarCacheComoFallback: true,
+        );
       }
       _estado = EstadoAuth.autenticado;
     } on FirebaseAuthException catch (e) {
@@ -105,6 +171,8 @@ class AuthProvider extends ChangeNotifier {
         // Define _usuario antes de salvar para evitar race condition
         _usuario = novoUsuario;
         await _usuarioRepository.criar(novoUsuario);
+        await _sessionCacheService.salvarUsuario(novoUsuario);
+        await _inicializarNotificacoes(credencial.user!.uid);
       }
       _estado = EstadoAuth.autenticado;
     } on FirebaseAuthException catch (e) {
@@ -119,7 +187,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Realiza logout.
   Future<void> logout() async {
+    await _removerTokenAtual();
     await _authService.logout();
+    await _sessionCacheService.limparUsuario();
     _usuario = null;
     _estado = EstadoAuth.naoAutenticado;
     notifyListeners();
@@ -151,6 +221,7 @@ class AuthProvider extends ChangeNotifier {
     if (_usuario == null) return;
     await _usuarioRepository.atualizarFotoUrl(_usuario!.id, fotoUrl);
     _usuario = _usuario!.copyWith(fotoUrl: fotoUrl);
+    await _sessionCacheService.salvarUsuario(_usuario!);
     notifyListeners();
   }
 
@@ -164,6 +235,65 @@ class AuthProvider extends ChangeNotifier {
     _carregando = valor;
     if (valor) _erro = null;
     notifyListeners();
+  }
+
+  Future<void> _inicializarNotificacoes(String uid) async {
+    if (!_messagingService.suportaPush) return;
+
+    try {
+      await _messagingService.solicitarPermissao();
+
+      final token = await _messagingService.obterToken();
+      if (token != null && token.isNotEmpty) {
+        await _atualizarTokenNotificacao(uid, token);
+      }
+
+      await _tokenRefreshSubscription?.cancel();
+      _tokenRefreshSubscription =
+          _messagingService.escutarAtualizacaoToken((novoToken) async {
+        if (novoToken.isEmpty) return;
+        await _atualizarTokenNotificacao(uid, novoToken);
+      });
+    } catch (e) {
+      debugPrint('Erro ao inicializar notificações push: $e');
+    }
+  }
+
+  Future<void> _atualizarTokenNotificacao(String uid, String novoToken) async {
+    if (_tokenNotificacaoAtual == novoToken) return;
+
+    try {
+      final tokenAnterior = _tokenNotificacaoAtual;
+      if (tokenAnterior != null && tokenAnterior.isNotEmpty) {
+        await _usuarioRepository.removerTokenNotificacao(uid, tokenAnterior);
+      }
+
+      await _usuarioRepository.salvarTokenNotificacao(uid, novoToken);
+      _tokenNotificacaoAtual = novoToken;
+    } catch (e) {
+      debugPrint('Erro ao atualizar token de notificação: $e');
+    }
+  }
+
+  Future<void> _removerTokenAtual() async {
+    final usuarioId = _usuario?.id;
+    final token = _tokenNotificacaoAtual;
+
+    await _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = null;
+
+    if (usuarioId == null || token == null || token.isEmpty) {
+      _tokenNotificacaoAtual = null;
+      return;
+    }
+
+    try {
+      await _usuarioRepository.removerTokenNotificacao(usuarioId, token);
+    } catch (e) {
+      debugPrint('Erro ao remover token de notificação: $e');
+    } finally {
+      _tokenNotificacaoAtual = null;
+    }
   }
 
   String _mensagemErroAuth(String codigo) {
@@ -187,5 +317,12 @@ class AuthProvider extends ChangeNotifier {
       default:
         return 'Erro ao realizar operação. Tente novamente.';
     }
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    _tokenRefreshSubscription?.cancel();
+    super.dispose();
   }
 }

@@ -39,6 +39,22 @@ class UsuarioRepository {
         .update({'fotoUrl': fotoUrl});
   }
 
+  /// Salva o token FCM do dispositivo da usuária.
+  Future<void> salvarTokenNotificacao(String id, String token) async {
+    await FirebaseFirestore.instance.collection(_colecao).doc(id).update({
+      'fcmTokens': FieldValue.arrayUnion([token]),
+      'atualizadoEm': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Remove o token FCM do dispositivo da usuária.
+  Future<void> removerTokenNotificacao(String id, String token) async {
+    await FirebaseFirestore.instance.collection(_colecao).doc(id).update({
+      'fcmTokens': FieldValue.arrayRemove([token]),
+      'atualizadoEm': DateTime.now().toIso8601String(),
+    });
+  }
+
   /// Busca uma usuária pelo e-mail.
   Future<Usuario?> buscarPorEmail(String email) async {
     final querySnapshot = await FirebaseFirestore.instance

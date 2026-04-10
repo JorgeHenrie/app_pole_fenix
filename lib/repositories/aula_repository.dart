@@ -7,24 +7,52 @@ class AulaRepository {
   static const String _colecao = 'aulas';
   final FirestoreService _firestore = FirestoreService();
 
+  bool _mesmaDataHora(DateTime a, DateTime b) {
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day &&
+        a.hour == b.hour &&
+        a.minute == b.minute;
+  }
+
   Future<Aula?> buscarPorId(String id) async {
     final doc = await _firestore.buscarDocumento(colecao: _colecao, id: id);
     if (!doc.exists || doc.data() == null) return null;
-    return Aula.fromMap(doc.data()!, doc.id);
+    return Aula.fromFirestore(doc);
   }
 
   Future<List<Aula>> listarProximas() async {
-    final agora = DateTime.now().toIso8601String();
+    final agora = DateTime.now();
     final snapshot = await _firestore
         .colecao(_colecao)
-        .where('dataHora', isGreaterThanOrEqualTo: agora)
+        .where('status', isEqualTo: 'agendada')
         .get();
     final aulas = snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
-        .where((a) => a.status == 'agendada')
+        .map((doc) => Aula.fromFirestore(doc))
+        .where((a) => !a.dataHora.isBefore(agora))
         .toList()
       ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
     return aulas;
+  }
+
+  Future<Aula?> buscarPorHorarioFixoEDataHora(
+    String horarioFixoId,
+    DateTime dataHora,
+  ) async {
+    final snapshot = await _firestore
+        .colecao(_colecao)
+        .where('horarioFixoId', isEqualTo: horarioFixoId)
+        .get();
+
+    Aula? cancelada;
+    for (final doc in snapshot.docs) {
+      final aula = Aula.fromFirestore(doc);
+      if (!_mesmaDataHora(aula.dataHora, dataHora)) continue;
+      if (aula.status != 'cancelada') return aula;
+      cancelada ??= aula;
+    }
+
+    return cancelada;
   }
 
   Future<List<Aula>> buscarProximasPorAluna(
@@ -39,7 +67,7 @@ class AulaRepository {
         .where('alunaId', isEqualTo: alunaId)
         .get();
     final aulas = snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .map((doc) => Aula.fromFirestore(doc))
         .where((a) => a.status == 'agendada' && a.dataHora.isAfter(agora))
         .toList()
       ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
@@ -47,13 +75,8 @@ class AulaRepository {
   }
 
   Future<bool> aulaJaExiste(String horarioFixoId, DateTime dataHora) async {
-    final snapshot = await _firestore
-        .colecao(_colecao)
-        .where('horarioFixoId', isEqualTo: horarioFixoId)
-        .where('dataHora', isEqualTo: dataHora.toIso8601String())
-        .limit(1)
-        .get();
-    return snapshot.docs.isNotEmpty;
+    return buscarPorHorarioFixoEDataHora(horarioFixoId, dataHora)
+        .then((aula) => aula != null);
   }
 
   Future<List<Aula>> buscarHistoricoPorAluna(String alunaId) async {
@@ -62,7 +85,14 @@ class AulaRepository {
         .where('alunaId', isEqualTo: alunaId)
         .get();
     final aulas = snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
+        .map((doc) {
+          try {
+            return Aula.fromFirestore(doc);
+          } catch (e) {
+            return null;
+          }
+        })
+        .whereType<Aula>()
         .toList()
       ..sort((a, b) => b.dataHora.compareTo(a.dataHora));
     return aulas;
@@ -72,15 +102,23 @@ class AulaRepository {
     final snapshot = await _firestore
         .colecao(_colecao)
         .where('horarioFixoId', isEqualTo: horarioFixoId)
-        .orderBy('dataHora')
         .get();
-    return snapshot.docs
-        .map((doc) => Aula.fromMap(doc.data(), doc.id))
-        .toList();
+    final aulas = snapshot.docs.map((doc) => Aula.fromFirestore(doc)).toList()
+      ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+    return aulas;
   }
 
   Future<String> criar(Aula aula) async {
-    return _firestore.adicionar(colecao: _colecao, dados: aula.toMap());
+    final id = aula.id.trim();
+    if (id.isEmpty) {
+      return _firestore.adicionar(colecao: _colecao, dados: aula.toMap());
+    }
+
+    await FirebaseFirestore.instance
+        .collection(_colecao)
+        .doc(id)
+        .set(aula.toMap());
+    return id;
   }
 
   Future<void> atualizar(Aula aula) async {
@@ -103,6 +141,7 @@ class AulaRepository {
         'status': 'cancelada',
         'motivoCancelamento': motivo,
         'dataCancelamento': DateTime.now().toIso8601String(),
+        'origemCancelamento': 'aluna',
         'dentroDosPrazo': dentroDosPrazo,
       },
     );
@@ -141,8 +180,12 @@ class AulaRepository {
         .get();
 
     final aulasPassadas = snapshot.docs.where((doc) {
-      final aula = Aula.fromMap(doc.data(), doc.id);
-      return aula.dataHora.isBefore(agora);
+      try {
+        final aula = Aula.fromFirestore(doc);
+        return aula.dataHora.isBefore(agora);
+      } catch (_) {
+        return false;
+      }
     }).toList();
 
     if (aulasPassadas.isEmpty) return 0;

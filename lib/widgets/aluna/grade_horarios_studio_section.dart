@@ -20,7 +20,6 @@ class GradeHorariosStudioSection extends StatefulWidget {
 class _GradeHorariosStudioSectionState
     extends State<GradeHorariosStudioSection> {
   DateTime _diaSelecionado = DateTime.now();
-  late DateTime _inicioSemana;
   late DateTime _inicioSemanaBase;
 
   static const int _limiteHome = 3;
@@ -32,7 +31,6 @@ class _GradeHorariosStudioSectionState
   void initState() {
     super.initState();
     _inicioSemanaBase = _calcularInicioSemana(DateTime.now());
-    _inicioSemana = _inicioSemanaBase;
     _pageController = PageController(initialPage: _paginaInicial);
   }
 
@@ -69,14 +67,10 @@ class _GradeHorariosStudioSectionState
     final novoInicio = _inicioSemanaBase.add(Duration(days: offset * 7));
     setState(() {
       _pageAtual = page;
-      _inicioSemana = novoInicio;
       _diaSelecionado =
           novoInicio.add(Duration(days: _diaSelecionado.weekday - 1));
     });
   }
-
-  List<DateTime> get _diasDaSemana =>
-      List.generate(7, (i) => _inicioSemana.add(Duration(days: i)));
 
   @override
   Widget build(BuildContext context) {
@@ -177,6 +171,7 @@ class _GradeHorariosStudioSectionState
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: dias.map((dia) {
                               final eHoje = _eHoje(dia);
+                              final diaPassado = _diaJaPassou(dia);
                               final eSelecionado =
                                   _mesmoDia(dia, _diaSelecionado);
                               final temSlot = gradeProvider.slots.any((s) =>
@@ -194,7 +189,10 @@ class _GradeHorariosStudioSectionState
                                   decoration: BoxDecoration(
                                     color: eSelecionado
                                         ? AppColors.primary
-                                        : Colors.transparent,
+                                        : diaPassado
+                                            ? Colors.grey
+                                                .withValues(alpha: 0.08)
+                                            : Colors.transparent,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Column(
@@ -206,7 +204,9 @@ class _GradeHorariosStudioSectionState
                                           fontWeight: FontWeight.w600,
                                           color: eSelecionado
                                               ? Colors.white
-                                              : AppColors.textSecondary,
+                                              : diaPassado
+                                                  ? AppColors.grey
+                                                  : AppColors.textSecondary,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -219,7 +219,9 @@ class _GradeHorariosStudioSectionState
                                               ? Colors.white
                                               : eHoje
                                                   ? AppColors.primary
-                                                  : AppColors.textPrimary,
+                                                  : diaPassado
+                                                      ? AppColors.grey
+                                                      : AppColors.textPrimary,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -232,7 +234,11 @@ class _GradeHorariosStudioSectionState
                                               ? (eSelecionado
                                                   ? Colors.white
                                                       .withValues(alpha: 0.8)
-                                                  : AppColors.secondary)
+                                                  : diaPassado
+                                                      ? AppColors.grey
+                                                          .withValues(
+                                                              alpha: 0.5)
+                                                      : AppColors.secondary)
                                               : Colors.transparent,
                                         ),
                                       ),
@@ -348,6 +354,7 @@ class _GradeHorariosStudioSectionState
     SlotDia slot,
     String alunaId,
   ) async {
+    final dentroDoPrazo = slot.dataHora.difference(DateTime.now()).inHours >= 2;
     final hora = DateFormat('HH:mm').format(slot.dataHora);
     final df = DateFormat("EEEE, dd 'de' MMMM", 'pt_BR');
 
@@ -376,14 +383,23 @@ class _GradeHorariosStudioSectionState
                 color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppColors.warning, size: 16),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.warning,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Você poderá remarcar esta aula em outro horário disponível.',
-                      style: TextStyle(fontSize: 12, color: AppColors.warning),
+                      dentroDoPrazo
+                          ? 'Você poderá remarcar esta aula em outro horário disponível.'
+                          : 'Cancelamentos com menos de 2 horas não geram reposição.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.warning,
+                      ),
                     ),
                   ),
                 ],
@@ -413,7 +429,7 @@ class _GradeHorariosStudioSectionState
 
     if (confirmar != true || !context.mounted) return;
 
-    final erro = await gradeProvider.cancelarAulaECriarReposicao(
+    final resultado = await gradeProvider.cancelarAulaECriarReposicao(
       slot: slot,
       alunaId: alunaId,
       motivo: 'Cancelamento solicitado pela aluna',
@@ -422,10 +438,17 @@ class _GradeHorariosStudioSectionState
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(erro != null
-            ? erro
-            : 'Aula cancelada! Uma reposição está disponível por 30 dias.'),
-        backgroundColor: erro != null ? AppColors.error : AppColors.success,
+        content: Text(
+          resultado.erro ??
+              (resultado.criouReposicao
+                  ? 'Aula cancelada! Uma reposição está disponível por 30 dias.'
+                  : 'Aula cancelada. Você perdeu o crédito desta aula.'),
+        ),
+        backgroundColor: resultado.erro != null
+            ? AppColors.error
+            : (resultado.criouReposicao
+                ? AppColors.success
+                : AppColors.warning),
       ),
     );
   }
@@ -584,6 +607,13 @@ class _GradeHorariosStudioSectionState
   static bool _eHoje(DateTime d) {
     final agora = DateTime.now();
     return d.year == agora.year && d.month == agora.month && d.day == agora.day;
+  }
+
+  static bool _diaJaPassou(DateTime d) {
+    final hoje = DateTime.now();
+    final data = DateTime(d.year, d.month, d.day);
+    final baseHoje = DateTime(hoje.year, hoje.month, hoje.day);
+    return data.isBefore(baseHoje);
   }
 
   static bool _mesmoDia(DateTime a, DateTime b) =>
@@ -1118,6 +1148,9 @@ class _BottomSheetTodosDoDia extends StatelessWidget {
       DateFormat("EEEE, dd 'de' MMMM", 'pt_BR').format(dia),
     );
     final total = slots.length;
+    final diaPassado = DateTime(dia.year, dia.month, dia.day).isBefore(
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day),
+    );
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -1164,7 +1197,9 @@ class _BottomSheetTodosDoDia extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$total horário${total == 1 ? '' : 's'} disponível${total == 1 ? '' : 'is'}',
+                          diaPassado
+                              ? '$total aula${total == 1 ? '' : 's'} realizada${total == 1 ? '' : 's'} neste dia'
+                              : '$total horário${total == 1 ? '' : 's'} disponível${total == 1 ? '' : 'is'}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,

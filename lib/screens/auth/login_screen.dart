@@ -57,11 +57,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
-      // Primeiro acesso: aluna importada deve atualizar e-mail e senha
-      if (usuario.primeiroAcesso) {
-        Navigator.of(context).pushReplacementNamed(Routes.primeiroAcesso);
-        return;
-      }
       // Verifica status do cadastro da aluna
       if (usuario.statusCadastro == 'pendente') {
         Navigator.of(context).pushReplacementNamed(Routes.aguardandoAprovacao);
@@ -89,137 +84,214 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 48),
-                // Logo / Título
-                const Icon(
-                  Icons.self_improvement,
-                  size: 80,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Fênix Pole Dance',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Faça login para continuar',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                ),
-                const SizedBox(height: 48),
-                // Campo de e-mail
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'E-mail',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  validator: Validators.email,
-                ),
-                const SizedBox(height: 16),
-                // Campo de senha
-                TextFormField(
-                  controller: _senhaController,
-                  obscureText: _obscurecerSenha,
-                  decoration: InputDecoration(
-                    labelText: 'Senha',
-                    prefixIcon: const Icon(Icons.lock_outlined),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurecerSenha
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurecerSenha = !_obscurecerSenha),
-                    ),
-                  ),
-                  validator: Validators.senha,
-                ),
-                const SizedBox(height: 8),
-                // Link "Esqueci minha senha"
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () =>
-                        Navigator.of(context).pushNamed(Routes.recuperarSenha),
-                    child: const Text('Esqueci minha senha'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Mensagem de erro
-                Consumer<AuthProvider>(
-                  builder: (context, auth, _) {
-                    if (auth.erro != null) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          auth.erro!,
-                          style: const TextStyle(color: AppColors.error),
-                          textAlign: TextAlign.center,
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-                // Botão Entrar
-                Consumer<AuthProvider>(
-                  builder: (context, auth, _) {
-                    return ElevatedButton(
-                      onPressed: auth.carregando ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: auth.carregando
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text(
-                              'Entrar',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-                // Link "Criar conta"
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/teste3.jpg',
+            fit: BoxFit.cover,
+          ),
+          Container(
+            color: Colors.black.withValues(alpha: 0.35),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Não tem uma conta?'),
-                    TextButton(
-                      onPressed: () =>
-                          Navigator.of(context).pushNamed(Routes.cadastro),
-                      child: const Text('Criar conta'),
+                    const SizedBox(height: 48),
+                    Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.self_improvement,
+                        size: 52,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Fênix Pole Dance',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 8,
+                            color: Colors.black.withValues(alpha: 0.7),
+                            offset: Offset(2, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Faça login para continuar',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 8,
+                            color: Colors.black.withValues(alpha: 0.8),
+                            offset: Offset(2, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    // Campo de e-mail
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'E-mail',
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
+                      validator: Validators.email,
+                    ),
+                    const SizedBox(height: 16),
+                    // Campo de senha
+                    TextFormField(
+                      controller: _senhaController,
+                      obscureText: _obscurecerSenha,
+                      decoration: InputDecoration(
+                        labelText: 'Senha',
+                        prefixIcon: const Icon(Icons.lock_outlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurecerSenha
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () => setState(
+                              () => _obscurecerSenha = !_obscurecerSenha),
+                        ),
+                      ),
+                      validator: Validators.senha,
+                    ),
+                    const SizedBox(height: 8),
+                    // Link "Esqueci minha senha"
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context)
+                            .pushNamed(Routes.recuperarSenha),
+                        child: const Text(
+                          'Esqueci minha senha',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 8,
+                                color: Colors.black87,
+                                offset: Offset(2, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Mensagem de erro
+                    Consumer<AuthProvider>(
+                      builder: (context, auth, _) {
+                        if (auth.erro != null) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(
+                              auth.erro!,
+                              style: const TextStyle(color: AppColors.error),
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    // Botão Entrar
+                    Consumer<AuthProvider>(
+                      builder: (context, auth, _) {
+                        return ElevatedButton(
+                          onPressed: auth.carregando ? null : _login,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: auth.carregando
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'Entrar',
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    // Link "Criar conta"
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Não tem uma conta?',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 8,
+                                color: Colors.black87,
+                                offset: Offset(2, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(context).pushNamed(Routes.cadastro),
+                          child: const Text(
+                            'Criar conta',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              decoration: TextDecoration.underline,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 8,
+                                  color: Colors.black87,
+                                  offset: Offset(2, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

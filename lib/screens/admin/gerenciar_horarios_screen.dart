@@ -98,7 +98,7 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
                           .where((g) => g.diaSemana == dia)
                           .toList()
                         ..sort((a, b) => a.horario.compareTo(b.horario));
-                      return _DiaSection(
+                      return _DiaExpansionSection(
                         dia: _diasSemana[dia] ?? 'Dia $dia',
                         horarios: horariosHoje,
                         ocupacao: _ocupacao,
@@ -108,6 +108,7 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
                         },
                         onEdit: (g) => _mostrarEdicao(g),
                         onVerAlunas: (g) => _mostrarAlunas(g),
+                        onExcluir: (g) => _confirmarExcluirHorario(context, g),
                       );
                     },
                   ),
@@ -183,49 +184,99 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
       ),
     );
   }
+
+  void _confirmarExcluirHorario(
+      BuildContext context, GradeHorario grade) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir horário'),
+        content: Text(
+            'Tem certeza que deseja excluir o horário "${grade.horario} • ${grade.modalidade}"? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar == true) {
+      await _gradeRepo.excluir(grade.id);
+      _carregarDados();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Horário excluído com sucesso!'),
+              backgroundColor: AppColors.success),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
 }
 
-class _DiaSection extends StatelessWidget {
+class _DiaExpansionSection extends StatelessWidget {
   final String dia;
   final List<GradeHorario> horarios;
   final Map<String, int> ocupacao;
-  final Function(GradeHorario) onToggle;
-  final Function(GradeHorario) onEdit;
-  final Function(GradeHorario) onVerAlunas;
+  final void Function(GradeHorario) onToggle;
+  final void Function(GradeHorario) onEdit;
+  final void Function(GradeHorario) onVerAlunas;
+  final void Function(GradeHorario) onExcluir;
 
-  const _DiaSection({
+  _DiaExpansionSection({
     required this.dia,
     required this.horarios,
     required this.ocupacao,
     required this.onToggle,
     required this.onEdit,
     required this.onVerAlunas,
-  });
+    required this.onExcluir,
+    Key? key,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Text(
-            dia,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-          ),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 1,
+      child: ExpansionTile(
+        title: Text(
+          dia,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
         ),
-        ...horarios.map((h) => _HorarioSlotCard(
-              grade: h,
-              vagas: ocupacao['${h.diaSemana}_${h.horario}'] ?? 0,
-              onToggle: () => onToggle(h),
-              onEdit: () => onEdit(h),
-              onVerAlunas: () => onVerAlunas(h),
-            )),
-        const SizedBox(height: 8),
-      ],
+        initiallyExpanded: false,
+        children: horarios.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Nenhum horário cadastrado para este dia.'),
+                ),
+              ]
+            : horarios
+                .map((h) => _HorarioSlotCard(
+                      grade: h,
+                      vagas: ocupacao['${h.diaSemana}_${h.horario}'] ?? 0,
+                      onToggle: () => onToggle(h),
+                      onEdit: () => onEdit(h),
+                      onVerAlunas: () => onVerAlunas(h),
+                      onExcluir: () => onExcluir(h),
+                    ))
+                .toList(),
+      ),
     );
   }
 }
@@ -236,6 +287,7 @@ class _HorarioSlotCard extends StatelessWidget {
   final VoidCallback onToggle;
   final VoidCallback onEdit;
   final VoidCallback onVerAlunas;
+  final VoidCallback onExcluir;
 
   const _HorarioSlotCard({
     required this.grade,
@@ -243,6 +295,7 @@ class _HorarioSlotCard extends StatelessWidget {
     required this.onToggle,
     required this.onEdit,
     required this.onVerAlunas,
+    required this.onExcluir,
   });
 
   @override
@@ -322,6 +375,14 @@ class _HorarioSlotCard extends StatelessWidget {
                       grade.ativo ? Icons.visibility_off : Icons.visibility,
                     ),
                     title: Text(grade.ativo ? 'Desativar' : 'Ativar'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  onTap: onExcluir,
+                  child: const ListTile(
+                    leading: Icon(Icons.delete, color: Colors.red),
+                    title: Text('Excluir', style: TextStyle(color: Colors.red)),
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
@@ -563,11 +624,11 @@ class _GradeHorarioDialog extends StatefulWidget {
 }
 
 class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
-  final _horarioController = TextEditingController();
-  final _modalidadeController = TextEditingController();
   int _diaSemana = 1;
   int _capacidade = 3;
   bool _processando = false;
+  final TextEditingController _horarioController = TextEditingController();
+  final TextEditingController _modalidadeController = TextEditingController();
 
   final _diasSemana = const {
     1: 'Segunda-feira',
@@ -585,11 +646,11 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
     if (widget.gradeExistente != null) {
       final g = widget.gradeExistente!;
       _diaSemana = g.diaSemana;
-      _horarioController.text = g.horario;
       _capacidade = g.capacidadeMaxima;
+      _horarioController.text = g.horario;
       _modalidadeController.text = g.modalidade;
     } else {
-      _modalidadeController.text = 'Pole Dance';
+      _capacidade = 3;
     }
   }
 

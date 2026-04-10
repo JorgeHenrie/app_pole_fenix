@@ -72,6 +72,13 @@ class GradeHorarioRepository {
     );
   }
 
+  Future<void> excluir(String id) async {
+    await _firestore.remover(
+      colecao: _colecao,
+      id: id,
+    );
+  }
+
   /// Retorna os primeiros nomes das alunas matriculadas neste slot via horário fixo.
   Future<List<String>> buscarNomesFixosPorSlot(
     int diaSemana,
