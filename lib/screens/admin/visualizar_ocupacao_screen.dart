@@ -79,16 +79,32 @@ class _VisualizarOcupacaoScreenState extends State<VisualizarOcupacaoScreen> {
   }
 
   Future<void> _verAlunas(GradeHorario grade) async {
-    showDialog(
+    final navigator = Navigator.of(context, rootNavigator: true);
+    var loadingAberto = true;
+
+    showDialog<void>(
       context: context,
-      builder: (_) => const AlertDialog(
-        title: Text('Carregando…'),
-        content: SizedBox(
-          height: 60,
-          child: Center(child: CircularProgressIndicator()),
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => WillPopScope(
+        onWillPop: () async => false,
+        child: const AlertDialog(
+          title: Text('Carregando...'),
+          content: SizedBox(
+            height: 60,
+            child: Center(child: CircularProgressIndicator()),
+          ),
         ),
       ),
     );
+
+    Future<void> fecharLoading() async {
+      if (!loadingAberto) return;
+      loadingAberto = false;
+      if (navigator.mounted) {
+        navigator.pop();
+      }
+    }
 
     try {
       final horarios = await _horarioFixoRepo.buscarPorDiaHorario(
@@ -102,11 +118,12 @@ class _VisualizarOcupacaoScreenState extends State<VisualizarOcupacaoScreen> {
         if (aluna != null) alunas.add(aluna);
       }
 
+      await fecharLoading();
       if (!mounted) return;
-      Navigator.of(context).pop(); // fecha loading dialog
 
-      showDialog(
+      await showDialog<void>(
         context: context,
+        useRootNavigator: true,
         builder: (ctx) => AlertDialog(
           title: Text(
             'Alunas — ${_diasSemana[grade.diaSemana] ?? ''} ${grade.horario}',
@@ -145,10 +162,10 @@ class _VisualizarOcupacaoScreenState extends State<VisualizarOcupacaoScreen> {
         ),
       );
     } catch (e) {
+      await fecharLoading();
       if (mounted) {
-        Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao buscar alunas')),
+          SnackBar(content: Text('Erro ao buscar alunas: $e')),
         );
       }
     }

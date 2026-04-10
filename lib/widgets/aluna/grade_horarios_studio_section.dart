@@ -20,7 +20,6 @@ class GradeHorariosStudioSection extends StatefulWidget {
 class _GradeHorariosStudioSectionState
     extends State<GradeHorariosStudioSection> {
   DateTime _diaSelecionado = DateTime.now();
-  late DateTime _inicioSemana;
   late DateTime _inicioSemanaBase;
 
   static const int _limiteHome = 3;
@@ -32,7 +31,6 @@ class _GradeHorariosStudioSectionState
   void initState() {
     super.initState();
     _inicioSemanaBase = _calcularInicioSemana(DateTime.now());
-    _inicioSemana = _inicioSemanaBase;
     _pageController = PageController(initialPage: _paginaInicial);
   }
 
@@ -69,14 +67,10 @@ class _GradeHorariosStudioSectionState
     final novoInicio = _inicioSemanaBase.add(Duration(days: offset * 7));
     setState(() {
       _pageAtual = page;
-      _inicioSemana = novoInicio;
       _diaSelecionado =
           novoInicio.add(Duration(days: _diaSelecionado.weekday - 1));
     });
   }
-
-  List<DateTime> get _diasDaSemana =>
-      List.generate(7, (i) => _inicioSemana.add(Duration(days: i)));
 
   @override
   Widget build(BuildContext context) {
@@ -360,6 +354,7 @@ class _GradeHorariosStudioSectionState
     SlotDia slot,
     String alunaId,
   ) async {
+    final dentroDoPrazo = slot.dataHora.difference(DateTime.now()).inHours >= 2;
     final hora = DateFormat('HH:mm').format(slot.dataHora);
     final df = DateFormat("EEEE, dd 'de' MMMM", 'pt_BR');
 
@@ -388,14 +383,23 @@ class _GradeHorariosStudioSectionState
                 color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: AppColors.warning, size: 16),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.info_outline,
+                    color: AppColors.warning,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Você poderá remarcar esta aula em outro horário disponível.',
-                      style: TextStyle(fontSize: 12, color: AppColors.warning),
+                      dentroDoPrazo
+                          ? 'Você poderá remarcar esta aula em outro horário disponível.'
+                          : 'Cancelamentos com menos de 2 horas não geram reposição.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.warning,
+                      ),
                     ),
                   ),
                 ],
@@ -425,7 +429,7 @@ class _GradeHorariosStudioSectionState
 
     if (confirmar != true || !context.mounted) return;
 
-    final erro = await gradeProvider.cancelarAulaECriarReposicao(
+    final resultado = await gradeProvider.cancelarAulaECriarReposicao(
       slot: slot,
       alunaId: alunaId,
       motivo: 'Cancelamento solicitado pela aluna',
@@ -434,10 +438,17 @@ class _GradeHorariosStudioSectionState
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(erro != null
-            ? erro
-            : 'Aula cancelada! Uma reposição está disponível por 30 dias.'),
-        backgroundColor: erro != null ? AppColors.error : AppColors.success,
+        content: Text(
+          resultado.erro ??
+              (resultado.criouReposicao
+                  ? 'Aula cancelada! Uma reposição está disponível por 30 dias.'
+                  : 'Aula cancelada. Você perdeu o crédito desta aula.'),
+        ),
+        backgroundColor: resultado.erro != null
+            ? AppColors.error
+            : (resultado.criouReposicao
+                ? AppColors.success
+                : AppColors.warning),
       ),
     );
   }

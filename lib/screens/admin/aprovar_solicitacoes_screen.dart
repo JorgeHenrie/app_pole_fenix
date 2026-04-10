@@ -13,12 +13,12 @@ class AprovarSolicitacoesScreen extends StatefulWidget {
       _AprovarSolicitacoesScreenState();
 }
 
-class _AprovarSolicitacoesScreenState
-    extends State<AprovarSolicitacoesScreen> {
+class _AprovarSolicitacoesScreenState extends State<AprovarSolicitacoesScreen> {
   final SolicitacaoMudancaHorarioRepository _repo =
       SolicitacaoMudancaHorarioRepository();
   List<SolicitacaoMudancaHorario> _solicitacoes = [];
   bool _carregando = false;
+  String? _erroCarregamento;
 
   final _diasSemana = const {
     1: 'Segunda-feira',
@@ -37,11 +37,30 @@ class _AprovarSolicitacoesScreenState
   }
 
   Future<void> _carregar() async {
-    setState(() => _carregando = true);
+    setState(() {
+      _carregando = true;
+      _erroCarregamento = null;
+    });
     try {
-      _solicitacoes = await _repo.listarPendentes();
-    } catch (_) {}
-    setState(() => _carregando = false);
+      final solicitacoes = await _repo.listarPendentes();
+      if (!mounted) return;
+      setState(() {
+        _solicitacoes = solicitacoes;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _erroCarregamento =
+            'Nao foi possivel carregar as solicitacoes pendentes.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao carregar solicitacoes: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _carregando = false);
+      }
+    }
   }
 
   @override
@@ -59,41 +78,99 @@ class _AprovarSolicitacoesScreenState
       ),
       body: _carregando
           ? const LoadingIndicator()
-          : _solicitacoes.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.task_alt,
-                          size: 64, color: Colors.grey.shade400),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Nenhuma solicitação pendente',
-                        style: TextStyle(color: Colors.grey.shade600),
+          : _erroCarregamento != null && _solicitacoes.isEmpty
+              ? _buildEstadoErro()
+              : _solicitacoes.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.task_alt,
+                              size: 64, color: Colors.grey.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Nenhuma solicitação pendente',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _carregar,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _solicitacoes.length,
-                    itemBuilder: (context, index) => _SolicitacaoCard(
-                      solicitacao: _solicitacoes[index],
-                      diasSemana: _diasSemana,
-                      onResponder: (status, resposta) async {
-                        await _repo.responder(
-                          _solicitacoes[index].id,
-                          status,
-                          resposta,
-                          'admin',
-                        );
-                        _carregar();
-                      },
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _carregar,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _solicitacoes.length,
+                        itemBuilder: (context, index) {
+                          final solicitacao = _solicitacoes[index];
+                          return _SolicitacaoCard(
+                            solicitacao: solicitacao,
+                            diasSemana: _diasSemana,
+                            onResponder: (status, resposta) async {
+                              try {
+                                await _repo.responder(
+                                  solicitacao.id,
+                                  status,
+                                  resposta,
+                                  'admin',
+                                );
+                                if (!mounted) return;
+                                setState(() {
+                                  _solicitacoes.removeWhere(
+                                      (item) => item.id == solicitacao.id);
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      status == 'aprovada'
+                                          ? 'Solicitacao aprovada.'
+                                          : 'Solicitacao rejeitada.',
+                                    ),
+                                    backgroundColor: status == 'aprovada'
+                                        ? Colors.green
+                                        : AppColors.error,
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Erro ao responder solicitacao: $e'),
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ),
+    );
+  }
+
+  Widget _buildEstadoErro() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_outlined,
+                size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              _erroCarregamento ?? 'Erro ao carregar solicitacoes.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _carregar,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -147,8 +224,8 @@ class _SolicitacaoCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Solicitado em: ${DateFormatter.data(solicitacao.solicitadoEm)}',
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 12),
+              style:
+                  const TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
             Row(

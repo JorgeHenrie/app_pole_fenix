@@ -243,24 +243,6 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
   }
 }
 
-/// Gera as próximas [semanas] ocorrências para uma lista de horários fixos,
-/// ordenadas por data crescente.
-List<({DateTime data, HorarioFixo horario})> _gerarProximasOcorrencias(
-  List<HorarioFixo> horarios, {
-  int semanas = 4,
-}) {
-  final result = <({DateTime data, HorarioFixo horario})>[];
-  for (final h in horarios) {
-    DateTime proxima = _proximaOcorrencia(h.diaSemana, h.horario);
-    for (int i = 0; i < semanas; i++) {
-      result.add((data: proxima, horario: h));
-      proxima = proxima.add(const Duration(days: 7));
-    }
-  }
-  result.sort((a, b) => a.data.compareTo(b.data));
-  return result;
-}
-
 /// Calcula a próxima data de ocorrência de um horário fixo.
 /// Se hoje é o dia e o horário ainda não passou, retorna hoje.
 /// Caso contrário, retorna a próxima ocorrência na semana seguinte.
@@ -352,105 +334,6 @@ class _HorarioFixoCard extends StatelessWidget {
             TextButton(
               onPressed: onSolicitarMudanca,
               child: const Text('Mudar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OcorrenciaFixaCard extends StatelessWidget {
-  final DateTime data;
-  final HorarioFixo horario;
-
-  const _OcorrenciaFixaCard({required this.data, required this.horario});
-
-  @override
-  Widget build(BuildContext context) {
-    final agora = DateTime.now();
-    final isHoje = data.year == agora.year &&
-        data.month == agora.month &&
-        data.day == agora.day;
-    final cor = isHoje ? AppColors.secondary : AppColors.primary;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: cor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    horario.horario,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: cor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    isHoje
-                        ? 'HOJE'
-                        : '${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: cor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    horario.modalidade,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${horario.diaSemanaTexto} • ${DateFormatter.data(data)}',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'agendada',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.success,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
             ),
           ],
         ),
@@ -597,7 +480,11 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         texto,
-        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: fg,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -606,7 +493,11 @@ class _StatusBadge extends StatelessWidget {
 class _CancelarAulaDialog extends StatefulWidget {
   final Aula aula;
   final Future<void> Function(String motivo) onConfirmar;
-  const _CancelarAulaDialog({required this.aula, required this.onConfirmar});
+
+  const _CancelarAulaDialog({
+    required this.aula,
+    required this.onConfirmar,
+  });
 
   @override
   State<_CancelarAulaDialog> createState() => _CancelarAulaDialogState();
@@ -617,7 +508,6 @@ class _CancelarAulaDialogState extends State<_CancelarAulaDialog> {
   bool _entendeuPerda = false;
   bool _processando = false;
 
-  @override
   void dispose() {
     _motivoController.dispose();
     super.dispose();

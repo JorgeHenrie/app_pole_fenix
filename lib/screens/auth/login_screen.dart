@@ -4,7 +4,6 @@ import '../../providers/auth_provider.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
-import 'dart:io' as io;
 
 /// Tela de login do app.
 class LoginScreen extends StatefulWidget {
@@ -58,11 +57,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         return;
       }
-      // Primeiro acesso: aluna importada deve atualizar e-mail e senha
-      if (usuario.primeiroAcesso) {
-        Navigator.of(context).pushReplacementNamed(Routes.primeiroAcesso);
-        return;
-      }
       // Verifica status do cadastro da aluna
       if (usuario.statusCadastro == 'pendente') {
         Navigator.of(context).pushReplacementNamed(Routes.aguardandoAprovacao);
@@ -98,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
             fit: BoxFit.cover,
           ),
           Container(
-            color: Colors.black.withOpacity(0.35), // overlay escuro
+            color: Colors.black.withValues(alpha: 0.35),
           ),
           SafeArea(
             child: SingleChildScrollView(
@@ -109,11 +103,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 48),
-                    // Logo / Título
-                    Image.asset(
-                      'assets/images/Logo.png',
-                      height: 100,
-                      fit: BoxFit.contain,
+                    Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.self_improvement,
+                        size: 52,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -125,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         shadows: [
                           Shadow(
                             blurRadius: 8,
-                            color: Colors.black.withOpacity(0.7),
+                            color: Colors.black.withValues(alpha: 0.7),
                             offset: Offset(2, 2),
                           ),
                         ],
@@ -141,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         shadows: [
                           Shadow(
                             blurRadius: 8,
-                            color: Colors.black.withOpacity(0.8),
+                            color: Colors.black.withValues(alpha: 0.8),
                             offset: Offset(2, 2),
                           ),
                         ],

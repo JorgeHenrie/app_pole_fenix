@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_colors.dart';
-import '../../repositories/usuario_repository.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/assinatura.dart';
 import '../../models/horario_fixo.dart';
@@ -261,7 +261,6 @@ class _AlunaDetalhesSheetState extends State<_AlunaDetalhesSheet> {
   late NivelAluna? _nivel;
   bool _salvandoNivel = false;
   bool _salvandoVencimento = false;
-  final UsuarioRepository _usuarioRepo = UsuarioRepository();
 
   @override
   void initState() {

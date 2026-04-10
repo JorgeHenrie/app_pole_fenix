@@ -225,7 +225,7 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
   }
 }
 
-class _DiaExpansionSection extends StatefulWidget {
+class _DiaExpansionSection extends StatelessWidget {
   final String dia;
   final List<GradeHorario> horarios;
   final Map<String, int> ocupacao;
@@ -246,43 +246,34 @@ class _DiaExpansionSection extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<_DiaExpansionSection> createState() => _DiaExpansionSectionState();
-}
-
-class _DiaExpansionSectionState extends State<_DiaExpansionSection> {
-  bool _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
       child: ExpansionTile(
         title: Text(
-          widget.dia,
+          dia,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary,
               ),
         ),
         initiallyExpanded: false,
-        onExpansionChanged: (val) => setState(() => _expanded = val),
-        children: widget.horarios.isEmpty
+        children: horarios.isEmpty
             ? [
                 const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text('Nenhum horário cadastrado para este dia.'),
                 ),
               ]
-            : widget.horarios
+            : horarios
                 .map((h) => _HorarioSlotCard(
                       grade: h,
-                      vagas:
-                          widget.ocupacao['${h.diaSemana}_${h.horario}'] ?? 0,
-                      onToggle: () => widget.onToggle(h),
-                      onEdit: () => widget.onEdit(h),
-                      onVerAlunas: () => widget.onVerAlunas(h),
-                      onExcluir: () => widget.onExcluir(h),
+                      vagas: ocupacao['${h.diaSemana}_${h.horario}'] ?? 0,
+                      onToggle: () => onToggle(h),
+                      onEdit: () => onEdit(h),
+                      onVerAlunas: () => onVerAlunas(h),
+                      onExcluir: () => onExcluir(h),
                     ))
                 .toList(),
       ),

@@ -6,6 +6,7 @@ import 'providers/auth_provider.dart';
 import 'providers/grade_horario_provider.dart';
 import 'providers/home_aluna_provider.dart';
 import 'providers/horario_fixo_provider.dart';
+import 'providers/notificacao_provider.dart';
 import 'providers/plano_provider.dart';
 import 'providers/reposicao_provider.dart';
 import 'app.dart';
@@ -23,6 +24,25 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ReposicaoProvider()),
         ChangeNotifierProvider(create: (_) => PlanoProvider()),
         ChangeNotifierProvider(create: (_) => GradeHorarioProvider()),
+        ChangeNotifierProxyProvider<AuthProvider, NotificacaoProvider>(
+          create: (_) => NotificacaoProvider(),
+          update: (_, authProvider, notificacaoProvider) {
+            final provider = notificacaoProvider ?? NotificacaoProvider();
+            final usuario = authProvider.usuario;
+            final usuarioId = usuario?.id;
+
+            if (usuarioId == null) {
+              provider.desconectar();
+            } else {
+              provider.conectar(
+                usuarioId,
+                tipoUsuario: usuario?.tipoUsuario ?? 'aluna',
+              );
+            }
+
+            return provider;
+          },
+        ),
       ],
       child: const App(),
     ),

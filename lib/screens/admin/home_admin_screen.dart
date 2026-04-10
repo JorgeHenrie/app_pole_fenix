@@ -5,6 +5,7 @@ import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../repositories/usuario_repository.dart';
+import '../../widgets/common/notificacao_action_button.dart';
 
 /// Tela inicial do administrador.
 class HomeAdminScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class HomeAdminScreen extends StatefulWidget {
 class _HomeAdminScreenState extends State<HomeAdminScreen> {
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
   int _pendentesCount = 0;
+  bool _falhaAoCarregarPendentes = false;
 
   @override
   void initState() {
@@ -28,9 +30,19 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
     try {
       final pendentes = await _usuarioRepo.buscarPendentes();
       if (mounted) {
-        setState(() => _pendentesCount = pendentes.length);
+        setState(() {
+          _pendentesCount = pendentes.length;
+          _falhaAoCarregarPendentes = false;
+        });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        setState(() => _falhaAoCarregarPendentes = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao atualizar cadastros pendentes: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -43,6 +55,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       appBar: AppBar(
         title: Text('Painel Admin – $nome'),
         actions: [
+          const NotificacaoActionButton(),
           IconButton(
             icon: const Icon(Icons.logout_outlined),
             tooltip: 'Sair',
@@ -75,6 +88,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             color: const Color(0xFFE65100),
             rota: Routes.aprovarCadastros,
             badge: _pendentesCount,
+            mostrarAviso: _falhaAoCarregarPendentes,
           ),
           _buildMenuCard(
             context,
@@ -104,19 +118,27 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
           _buildSectionTitle(context, 'Gestão'),
           _buildMenuCard(
             context,
+            icon: Icons.swap_horiz,
+            title: 'Solicitacoes de Mudanca',
+            subtitle: 'Responder pedidos de troca de horario',
+            color: const Color(0xFF6A1B9A),
+            rota: Routes.aprovarSolicitacoes,
+          ),
+          _buildMenuCard(
+            context,
+            icon: Icons.medical_information_outlined,
+            title: 'Validar Atestados',
+            subtitle: 'Aprovar ou rejeitar faltas com atestado',
+            color: const Color(0xFF00838F),
+            rota: Routes.validarAtestados,
+          ),
+          _buildMenuCard(
+            context,
             icon: Icons.payment,
             title: 'Pagamentos',
             subtitle: 'Controle de pagamentos e assinaturas',
             color: const Color(0xFF1565C0),
             rota: Routes.pagamentos,
-          ),
-          _buildMenuCard(
-            context,
-            icon: Icons.celebration,
-            title: 'Eventos',
-            subtitle: 'Publicar e gerenciar eventos',
-            color: const Color(0xFFE91E63),
-            rota: Routes.eventosAdmin,
           ),
         ],
       ),
@@ -163,6 +185,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
     required Color color,
     required String rota,
     required int badge,
+    bool mostrarAviso = false,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -206,6 +229,14 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
+            if (mostrarAviso)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(
+                  Icons.sync_problem_rounded,
+                  color: AppColors.warning,
                 ),
               ),
             const Icon(Icons.chevron_right, color: AppColors.grey),

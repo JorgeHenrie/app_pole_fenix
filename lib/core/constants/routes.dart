@@ -12,13 +12,13 @@ class Routes {
   static const String perfil = '/perfil';
   static const String eventos = '/eventos';
   static const String gerenciarHorarios = '/gerenciar-horarios';
-  static const String gerenciarAulas = '/gerenciar-aulas';
   static const String gerenciarAlunas = '/gerenciar-alunas';
   static const String pagamentos = '/pagamentos';
-  static const String eventosAdmin = '/eventos-admin';
   static const String meusHorarios = '/meus-horarios';
   static const String minhasReposicoes = '/minhas-reposicoes';
   static const String aprovarCadastros = '/admin/aprovar-cadastros';
+  static const String aprovarSolicitacoes = '/admin/aprovar-solicitacoes';
+  static const String validarAtestados = '/admin/validar-atestados';
 
   // Contratação de plano
   static const String contratarPlano = '/contratar-plano';
@@ -34,7 +34,4 @@ class Routes {
 
   // Notificações
   static const String notificacoes = '/notificacoes';
-
-  // Primeiro acesso (alunas importadas)
-  static const String primeiroAcesso = '/primeiro-acesso';
 }

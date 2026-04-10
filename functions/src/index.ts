@@ -1,10 +1,27 @@
 import * as admin from "firebase-admin";
+import {
+  onDocumentUpdated,
+  onDocumentWritten,
+} from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 
 admin.initializeApp();
 const db = admin.firestore();
+const REGION = "southamerica-east1";
+const TIME_ZONE = "America/Boa_Vista";
+const RR_UTC_OFFSET = "-04:00";
+const MINUTOS_CANCELAMENTO_TARDIO = 120;
+const UM_DIA_EM_MS = 24 * 60 * 60 * 1000;
+
+interface ConteudoNotificacao {
+  titulo: string;
+  mensagem: string;
+  tipo: string;
+  referenciaId?: string;
+  dados?: Record<string, string>;
+}
 
 /**
  * Roda todo dia à meia-noite (horário de Brasília).
@@ -14,8 +31,8 @@ const db = admin.firestore();
 export const darBaixaDiariaAulas = onSchedule(
   {
     schedule: "0 0 * * *",
-    timeZone: "America/Boa_Vista",
-    region: "southamerica-east1",
+    timeZone: TIME_ZONE,
+    region: REGION,
   },
   async () => {
     // Roraima usa UTC-4 fixo (sem horário de verão).
@@ -102,162 +119,195 @@ export const darBaixaDiariaAulas = onSchedule(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Remove acentos, espaços e caracteres especiais do nome → email placeholder. */
-function normalizarNome(nome: string): string {
-  return nome
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "")
-    .replace(/[^a-z0-9]/g, "");
+function parseDataApp(valor: unknown): Date | null {
+  if (valor instanceof admin.firestore.Timestamp) return valor.toDate();
+  if (valor instanceof Date) return valor;
+
+  if (typeof valor === "string") {
+    const possuiTimezone = /(Z|[+-]\d{2}:\d{2})$/.test(valor);
+    const texto = possuiTimezone ? valor : `${valor}${RR_UTC_OFFSET}`;
+    const data = new Date(texto);
+    if (!Number.isNaN(data.getTime())) return data;
+  }
+
+  return null;
+}
+
+function chaveDataRR(data: Date): string {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(data);
+
+  const ano = partes.find((parte) => parte.type === "year")?.value;
+  const mes = partes.find((parte) => parte.type === "month")?.value;
+  const dia = partes.find((parte) => parte.type === "day")?.value;
+
+  return `${ano}-${mes}-${dia}`;
+}
+
+function diferencaDiasCalendarioRR(destino: Date, origem: Date): number {
+  const destinoMs = Date.parse(`${chaveDataRR(destino)}T00:00:00Z`);
+  const origemMs = Date.parse(`${chaveDataRR(origem)}T00:00:00Z`);
+  return Math.round((destinoMs - origemMs) / UM_DIA_EM_MS);
+}
+
+function mesmoDiaRR(a: Date, b: Date): boolean {
+  return chaveDataRR(a) === chaveDataRR(b);
+}
+
+function formatarDataHoraRR(data: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(data);
+}
+
+function formatarDataRR(data: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(data);
+}
+
+function formatarHoraRR(data: Date): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(data);
+}
+
+function nomeDiaSemana(diaSemana: number): string {
+  switch (diaSemana) {
+    case 1:
+      return "segunda-feira";
+    case 2:
+      return "terça-feira";
+    case 3:
+      return "quarta-feira";
+    case 4:
+      return "quinta-feira";
+    case 5:
+      return "sexta-feira";
+    case 6:
+      return "sábado";
+    case 7:
+      return "domingo";
+    default:
+      return "dia informado";
+  }
+}
+
+async function listarAdminsAtivos(): Promise<string[]> {
+  const snapshot = await db
+    .collection("usuarios")
+    .where("tipoUsuario", "==", "admin")
+    .where("ativo", "==", true)
+    .get();
+
+  return snapshot.docs.map((doc) => doc.id);
+}
+
+async function obterNomeUsuario(usuarioId: string): Promise<string | null> {
+  const snapshot = await db.collection("usuarios").doc(usuarioId).get();
+  const nome = snapshot.data()?.nome;
+  return typeof nome === "string" && nome.trim().length > 0 ? nome : null;
+}
+
+async function enviarPushParaUsuarios(
+  usuarioIds: string[],
+  conteudo: ConteudoNotificacao
+): Promise<void> {
+  const ids = [...new Set(usuarioIds.filter((id) => id.trim().length > 0))];
+  if (ids.length === 0) return;
+
+  const snapshots = await Promise.all(
+    ids.map((usuarioId) => db.collection("usuarios").doc(usuarioId).get())
+  );
+
+  const tokens = new Set<string>();
+  for (const snapshot of snapshots) {
+    const valores = snapshot.data()?.fcmTokens;
+    if (!Array.isArray(valores)) continue;
+
+    for (const valor of valores) {
+      if (typeof valor === "string" && valor.trim().length > 0) {
+        tokens.add(valor);
+      }
+    }
+  }
+
+  if (tokens.size === 0) return;
+
+  try {
+    await admin.messaging().sendEachForMulticast({
+      tokens: [...tokens],
+      notification: {
+        title: conteudo.titulo,
+        body: conteudo.mensagem,
+      },
+      data: conteudo.dados ?? { tipo: conteudo.tipo },
+    });
+  } catch (erro: unknown) {
+    logger.warn(`Falha ao enviar push: ${String(erro)}`);
+  }
+}
+
+async function notificarUsuarios(
+  usuarioIds: string[],
+  conteudo: ConteudoNotificacao
+): Promise<void> {
+  const ids = [...new Set(usuarioIds.filter((id) => id.trim().length > 0))];
+  if (ids.length === 0) return;
+
+  const batch = db.batch();
+  const criadaEm = new Date().toISOString();
+
+  for (const usuarioId of ids) {
+    const notificacaoRef = db.collection("notificacoes").doc();
+    batch.set(notificacaoRef, {
+      usuarioId,
+      titulo: conteudo.titulo,
+      mensagem: conteudo.mensagem,
+      tipo: conteudo.tipo,
+      referenciaId: conteudo.referenciaId ?? null,
+      lida: false,
+      criadaEm,
+    });
+  }
+
+  await batch.commit();
+  await enviarPushParaUsuarios(ids, conteudo);
+}
+
+async function notificarUsuario(
+  usuarioId: string,
+  conteudo: ConteudoNotificacao
+): Promise<void> {
+  await notificarUsuarios([usuarioId], conteudo);
+}
+
+function construirMensagemLembreteAula(
+  aulas: Array<{ dataHora: Date; modalidade: string }>
+): string {
+  if (aulas.length === 1) {
+    const aula = aulas[0];
+    return `Sua aula de ${aula.modalidade} é hoje às ${formatarHoraRR(aula.dataHora)}.`;
+  }
+
+  const horarios = aulas.map((aula) => formatarHoraRR(aula.dataHora)).join(", ");
+  return `Você tem ${aulas.length} aulas hoje. Horários: ${horarios}.`;
 }
 
 /** Calcula a próxima data de vencimento dado o dia do mês. */
-function proximoVencimento(dia: number): Date {
-  const hoje = new Date();
-  if (hoje.getDate() < dia) {
-    return new Date(hoje.getFullYear(), hoje.getMonth(), dia);
-  }
-  const proximo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
-  const ultimoDia = new Date(
-    proximo.getFullYear(),
-    proximo.getMonth() + 1,
-    0
-  ).getDate();
-  return new Date(
-    proximo.getFullYear(),
-    proximo.getMonth(),
-    dia > ultimoDia ? ultimoDia : dia
-  );
-}
-
-// ─── Callable: criar contas em lote ──────────────────────────────────────────
-
-interface DadoAluna {
-  nome: string;
-  nivel: string;
-  mensalidade: number | null;
-  vencimentoDia: number | null;
-  aulasPorMes: number;
-}
-
-/**
- * Cria contas no Firebase Auth e documentos no Firestore para as alunas
- * importadas da planilha. Só pode ser chamada por um admin autenticado.
- *
- * Email placeholder: nome@fenixpole.local  |  Senha padrão: Fenix@2026
- */
-export const criarContasImportadas = onCall(
-  { region: "southamerica-east1" },
-  async (request) => {
-    // Verifica autenticação
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Login obrigatório.");
-    }
-
-    // Verifica se o chamador é admin
-    const callerSnap = await db
-      .collection("usuarios")
-      .doc(request.auth.uid)
-      .get();
-    if (callerSnap.data()?.tipoUsuario !== "admin") {
-      throw new HttpsError(
-        "permission-denied",
-        "Apenas administradores podem criar contas em lote."
-      );
-    }
-
-    const alunas = request.data.alunas as DadoAluna[];
-    if (!Array.isArray(alunas) || alunas.length === 0) {
-      throw new HttpsError("invalid-argument", "Lista de alunas vazia.");
-    }
-
-    const resultados: Array<{
-      nome: string;
-      ok: boolean;
-      email?: string;
-      erro?: string;
-    }> = [];
-
-    for (const aluna of alunas) {
-      const emailPlaceholder = `${normalizarNome(aluna.nome)}@fenixpole.local`;
-
-      try {
-        // Cria usuária no Firebase Auth
-        const userRecord = await admin.auth().createUser({
-          email: emailPlaceholder,
-          password: "Fenix@2026",
-          displayName: aluna.nome,
-        });
-
-        const agora = new Date();
-        const batch = db.batch();
-
-        // Documento na coleção usuarios com UID como id
-        const usuarioRef = db.collection("usuarios").doc(userRecord.uid);
-        batch.set(usuarioRef, {
-          nome: aluna.nome,
-          email: emailPlaceholder,
-          tipoUsuario: "aluna",
-          telefone: null,
-          dataCadastro: agora.toISOString(),
-          ativo: true,
-          fotoUrl: null,
-          atualizadoEm: null,
-          statusCadastro: "aprovado",
-          dataAprovacao: agora.toISOString(),
-          aprovadoPor: "importacao_planilha",
-          motivoRejeicao: null,
-          planoId: null,
-          nivel: aluna.nivel,
-          primeiroAcesso: true,
-        });
-
-        // Cria assinatura se houver plano
-        if (aluna.mensalidade && aluna.vencimentoDia) {
-          const planoSnap = await db
-            .collection("planos")
-            .where("aulasPorMes", "==", aluna.aulasPorMes)
-            .where("ativo", "==", true)
-            .limit(1)
-            .get();
-
-          if (!planoSnap.empty) {
-            const planoId = planoSnap.docs[0].id;
-            const dataRenovacao = proximoVencimento(aluna.vencimentoDia);
-
-            batch.update(usuarioRef, { planoId });
-
-            const assinaturaRef = db.collection("assinaturas").doc();
-            batch.set(assinaturaRef, {
-              alunaId: userRecord.uid,
-              planoId,
-              status: "ativa",
-              creditosDisponiveis: aluna.aulasPorMes,
-              aulasRealizadas: 0,
-              reposicoesDisponiveis: 0,
-              horarioFixoIds: [],
-              dataInicio: admin.firestore.Timestamp.fromDate(agora),
-              dataRenovacao:
-                admin.firestore.Timestamp.fromDate(dataRenovacao),
-              dataCancelamento: null,
-            });
-          }
-        }
-
-        await batch.commit();
-        resultados.push({ nome: aluna.nome, ok: true, email: emailPlaceholder });
-        logger.info(`Conta criada: ${aluna.nome} → ${emailPlaceholder}`);
-      } catch (e: unknown) {
-        const mensagem = e instanceof Error ? e.message : String(e);
-        resultados.push({ nome: aluna.nome, ok: false, erro: mensagem });
-        logger.error(`Erro ao criar conta para ${aluna.nome}: ${mensagem}`);
-      }
-    }
-
-    return { resultados };
-  }
-);
-
 /**
  * Exclui uma aluna de forma completa:
  *  1. Desabilita a conta no Firebase Auth (impede login imediatamente)
@@ -266,7 +316,7 @@ export const criarContasImportadas = onCall(
  *  4. Cancela a assinatura ativa (se houver)
  */
 export const excluirAluna = onCall(
-  { region: "southamerica-east1" },
+  { region: REGION },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Login obrigatório.");
@@ -338,7 +388,7 @@ export const excluirAluna = onCall(
  * Útil para corrigir registros que foram soft-deletados pelo método antigo.
  */
 export const sincronizarInativas = onCall(
-  { region: "southamerica-east1" },
+  { region: REGION },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Login obrigatório.");
@@ -415,5 +465,345 @@ export const sincronizarInativas = onCall(
     }
 
     return { corrigidas };
+  }
+);
+
+export const notificarCancelamentosDeAula = onDocumentWritten(
+  { document: "aulas/{aulaId}", region: REGION },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!depois) return;
+    if (depois.status !== "cancelada" || antes?.status === "cancelada") {
+      return;
+    }
+
+    const origem =
+      typeof depois.origemCancelamento === "string"
+        ? depois.origemCancelamento
+        : null;
+    const alunaId = typeof depois.alunaId === "string" ? depois.alunaId : null;
+    const dataHora = parseDataApp(depois.dataHora);
+
+    if (!origem || !alunaId || !dataHora) return;
+
+    if (origem === "aluna") {
+      const dataCancelamento = parseDataApp(depois.dataCancelamento) ?? new Date();
+      const minutosAteAula = Math.floor(
+        (dataHora.getTime() - dataCancelamento.getTime()) / (60 * 1000)
+      );
+
+      if (
+        minutosAteAula < 0 ||
+        minutosAteAula >= MINUTOS_CANCELAMENTO_TARDIO
+      ) {
+        return;
+      }
+
+      const adminIds = await listarAdminsAtivos();
+      if (adminIds.length === 0) return;
+
+      const nomeAluna = await obterNomeUsuario(alunaId);
+      await notificarUsuarios(adminIds, {
+        titulo: "Cancelamento com menos de 2h",
+        mensagem:
+          `${nomeAluna ?? "Uma aluna"} cancelou a aula de ` +
+          `${formatarDataHoraRR(dataHora)} com menos de 2 horas de antecedência.`,
+        tipo: "cancelamento_tardio",
+        dados: {
+          tipo: "cancelamento_tardio",
+          aulaId: event.params.aulaId,
+          alunaId,
+        },
+      });
+      return;
+    }
+
+    if (origem !== "admin") return;
+
+    const modalidade =
+      typeof depois.modalidade === "string" ? depois.modalidade : "sua modalidade";
+    await notificarUsuario(alunaId, {
+      titulo: "Aula cancelada pelo estúdio",
+      mensagem:
+        `O estúdio cancelou sua aula de ${modalidade} em ` +
+        `${formatarDataHoraRR(dataHora)}.`,
+      tipo: "aula_cancelada",
+      dados: {
+        tipo: "aula_cancelada",
+        aulaId: event.params.aulaId,
+      },
+    });
+  }
+);
+
+export const enviarLembretesAulasDoDia = onSchedule(
+  {
+    schedule: "0 * * * *",
+    timeZone: TIME_ZONE,
+    region: REGION,
+  },
+  async () => {
+    const snapshot = await db
+      .collection("aulas")
+      .where("status", "==", "agendada")
+      .get();
+
+    if (snapshot.empty) return;
+
+    const hoje = new Date();
+    const grupos = new Map<
+      string,
+      {
+        docs: admin.firestore.QueryDocumentSnapshot[];
+        aulas: Array<{ dataHora: Date; modalidade: string }>;
+      }
+    >();
+
+    for (const doc of snapshot.docs) {
+      const dados = doc.data();
+      if (dados.notificacaoDiaAulaEnviadaEm != null) continue;
+
+      const alunaId = typeof dados.alunaId === "string" ? dados.alunaId : null;
+      const dataHora = parseDataApp(dados.dataHora);
+      const modalidade =
+        typeof dados.modalidade === "string" ? dados.modalidade : "Pole";
+
+      if (!alunaId || !dataHora || !mesmoDiaRR(dataHora, hoje)) continue;
+
+      const grupo = grupos.get(alunaId) ?? { docs: [], aulas: [] };
+      grupo.docs.push(doc);
+      grupo.aulas.push({ dataHora, modalidade });
+      grupos.set(alunaId, grupo);
+    }
+
+    for (const [alunaId, grupo] of grupos.entries()) {
+      grupo.aulas.sort((a, b) => a.dataHora.getTime() - b.dataHora.getTime());
+
+      await notificarUsuario(alunaId, {
+        titulo: "Lembrete de aula",
+        mensagem: construirMensagemLembreteAula(grupo.aulas),
+        tipo: "lembrete_aula",
+        dados: {
+          tipo: "lembrete_aula",
+          data: chaveDataRR(grupo.aulas[0].dataHora),
+        },
+      });
+
+      const batch = db.batch();
+      const enviadaEm = new Date().toISOString();
+      for (const doc of grupo.docs) {
+        batch.update(doc.ref, { notificacaoDiaAulaEnviadaEm: enviadaEm });
+      }
+      await batch.commit();
+    }
+  }
+);
+
+export const enviarLembretesRenovacaoPlano = onSchedule(
+  {
+    schedule: "0 8 * * *",
+    timeZone: TIME_ZONE,
+    region: REGION,
+  },
+  async () => {
+    const snapshot = await db
+      .collection("assinaturas")
+      .where("status", "==", "ativa")
+      .get();
+
+    if (snapshot.empty) return;
+
+    const hoje = new Date();
+
+    for (const doc of snapshot.docs) {
+      const dados = doc.data();
+      const alunaId = typeof dados.alunaId === "string" ? dados.alunaId : null;
+      const dataRenovacao = parseDataApp(dados.dataRenovacao);
+
+      if (!alunaId || !dataRenovacao) continue;
+
+      const dias = diferencaDiasCalendarioRR(dataRenovacao, hoje);
+
+      if (dias === 3 && dados.notificacaoRenovacao3DiasEm == null) {
+        await notificarUsuario(alunaId, {
+          titulo: "Renovação do plano chegando",
+          mensagem:
+            `Seu plano renova em 3 dias, no dia ${formatarDataRR(dataRenovacao)}.`,
+          tipo: "renovacao_plano",
+          dados: {
+            tipo: "renovacao_plano",
+            assinaturaId: doc.id,
+            marco: "3_dias",
+          },
+        });
+
+        await doc.ref.update({
+          notificacaoRenovacao3DiasEm: new Date().toISOString(),
+        });
+      }
+
+      if (dias === 0 && dados.notificacaoRenovacaoUltimoDiaEm == null) {
+        await notificarUsuario(alunaId, {
+          titulo: "Último dia do plano atual",
+          mensagem:
+            `Hoje é o último dia do seu ciclo atual. A renovação está prevista para ${formatarDataRR(dataRenovacao)}.`,
+          tipo: "renovacao_plano",
+          dados: {
+            tipo: "renovacao_plano",
+            assinaturaId: doc.id,
+            marco: "ultimo_dia",
+          },
+        });
+
+        await doc.ref.update({
+          notificacaoRenovacaoUltimoDiaEm: new Date().toISOString(),
+        });
+      }
+    }
+  }
+);
+
+export const notificarNovoCadastroPendente = onDocumentWritten(
+  { document: "usuarios/{usuarioId}", region: REGION },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!depois) return;
+    if (depois.tipoUsuario !== "aluna") return;
+    if (depois.statusCadastro !== "pendente") return;
+    if (antes?.statusCadastro === "pendente") return;
+
+    const adminIds = await listarAdminsAtivos();
+    if (adminIds.length === 0) return;
+
+    const nomeAluna =
+      typeof depois.nome === "string" && depois.nome.trim().length > 0
+        ? depois.nome
+        : "Uma nova aluna";
+
+    await notificarUsuarios(adminIds, {
+      titulo: "Novo cadastro aguardando aprovação",
+      mensagem: `${nomeAluna} solicitou cadastro e está aguardando aprovação.`,
+      tipo: "cadastro_pendente",
+      referenciaId: event.params.usuarioId,
+      dados: {
+        tipo: "cadastro_pendente",
+        usuarioId: event.params.usuarioId,
+      },
+    });
+  }
+);
+
+export const notificarStatusCadastro = onDocumentUpdated(
+  { document: "usuarios/{usuarioId}", region: REGION },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!antes || !depois) return;
+    if (depois.tipoUsuario !== "aluna") return;
+    if (antes.statusCadastro === depois.statusCadastro) return;
+
+    if (depois.statusCadastro === "aprovado") {
+      await notificarUsuario(event.params.usuarioId, {
+        titulo: "Cadastro aprovado",
+        mensagem: "Seu cadastro foi aprovado. Você já pode acessar o app normalmente.",
+        tipo: "cadastro_status",
+        dados: {
+          tipo: "cadastro_status",
+          status: "aprovado",
+        },
+      });
+      return;
+    }
+
+    if (depois.statusCadastro === "rejeitado") {
+      await notificarUsuario(event.params.usuarioId, {
+        titulo: "Cadastro não aprovado",
+        mensagem:
+          typeof depois.motivoRejeicao === "string" &&
+          depois.motivoRejeicao.trim().length > 0
+            ? `Seu cadastro foi rejeitado. Motivo: ${depois.motivoRejeicao}`
+            : "Seu cadastro foi rejeitado. Entre em contato com o estúdio para mais detalhes.",
+        tipo: "cadastro_status",
+        dados: {
+          tipo: "cadastro_status",
+          status: "rejeitado",
+        },
+      });
+    }
+  }
+);
+
+export const notificarResultadoAtestado = onDocumentUpdated(
+  { document: "aulas/{aulaId}", region: REGION },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!antes || !depois) return;
+    if (antes.atestadoPendente != true || depois.atestadoPendente != false) {
+      return;
+    }
+
+    if (typeof depois.atestadoValidado !== "boolean") return;
+
+    const alunaId = typeof depois.alunaId === "string" ? depois.alunaId : null;
+    const dataHora = parseDataApp(depois.dataHora);
+    if (!alunaId || !dataHora) return;
+
+    await notificarUsuario(alunaId, {
+      titulo: depois.atestadoValidado
+        ? "Atestado aprovado"
+        : "Atestado rejeitado",
+      mensagem: depois.atestadoValidado
+          ? `Seu atestado da aula de ${formatarDataHoraRR(dataHora)} foi aprovado e a reposição já está disponível.`
+          : `Seu atestado da aula de ${formatarDataHoraRR(dataHora)} foi rejeitado.`,
+      tipo: "atestado",
+      dados: {
+        tipo: "atestado",
+        aulaId: event.params.aulaId,
+        resultado: depois.atestadoValidado ? "aprovado" : "rejeitado",
+      },
+    });
+  }
+);
+
+export const notificarRemocaoHorarioFixo = onDocumentUpdated(
+  { document: "horarios_fixos/{horarioFixoId}", region: REGION },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!antes || !depois) return;
+    if (antes.ativo !== true || depois.ativo !== false) return;
+
+    const motivo =
+      typeof depois.motivoDesativacao === "string"
+        ? depois.motivoDesativacao
+        : "";
+    if (!motivo.toLowerCase().includes("administrador")) return;
+
+    const alunaId = typeof depois.alunaId === "string" ? depois.alunaId : null;
+    const horario = typeof depois.horario === "string" ? depois.horario : null;
+    const diaSemana =
+      typeof depois.diaSemana === "number" ? depois.diaSemana : null;
+
+    if (!alunaId || !horario || diaSemana == null) return;
+
+    await notificarUsuario(alunaId, {
+      titulo: "Horário alterado pelo estúdio",
+      mensagem:
+        `Seu horário fixo de ${nomeDiaSemana(diaSemana)} às ${horario} ` +
+        `foi removido pela administração.`,
+      tipo: "horario",
+      dados: {
+        tipo: "horario",
+        horarioFixoId: event.params.horarioFixoId,
+      },
+    });
   }
 );

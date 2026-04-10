@@ -25,20 +25,25 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _verificarAutenticacao() async {
     final authProvider = context.read<AuthProvider>();
 
-    // Aguarda mínimo de 2 segundos E estado de auth resolvido
+    // Aguarda mínimo de 2 segundos e restauração da sessão concluída.
     await Future.wait([
       Future.delayed(const Duration(seconds: 2)),
-      _aguardarEstadoDefinido(authProvider),
+      _aguardarSessaoInicializada(authProvider),
     ]);
 
     if (!mounted) return;
 
-    if (authProvider.estaAutenticado) {
-      // Aguarda dados do usuário do Firestore se necessário
+    if (authProvider.usuarioFirebase != null && authProvider.usuario == null) {
+      await authProvider.recarregarUsuario();
+
+      if (!mounted) return;
+
       if (authProvider.usuario == null) {
         await _aguardarUsuario(authProvider);
       }
+    }
 
+    if (authProvider.estaAutenticado) {
       if (!mounted) return;
 
       if (authProvider.usuario != null) {
@@ -64,22 +69,18 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
-  Future<void> _aguardarEstadoDefinido(AuthProvider authProvider) async {
-    if (authProvider.estado != EstadoAuth.inicial) return;
+  Future<void> _aguardarSessaoInicializada(AuthProvider authProvider) async {
+    if (authProvider.sessaoInicializada) return;
 
     final completer = Completer<void>();
     void listener() {
-      if (authProvider.estado != EstadoAuth.inicial) {
+      if (authProvider.sessaoInicializada) {
         if (!completer.isCompleted) completer.complete();
       }
     }
 
     authProvider.addListener(listener);
-    try {
-      await completer.future.timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      debugPrint('SplashScreen: timeout ao aguardar estado de autenticação');
-    }
+    await completer.future;
     authProvider.removeListener(listener);
   }
 
@@ -93,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     authProvider.addListener(listener);
     try {
-      await completer.future.timeout(const Duration(seconds: 3));
+      await completer.future.timeout(const Duration(seconds: 8));
     } on TimeoutException {
       debugPrint('SplashScreen: timeout ao aguardar dados do usuário');
     }

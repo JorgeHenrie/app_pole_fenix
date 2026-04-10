@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/grade_horario_provider.dart';
@@ -11,6 +10,7 @@ import '../../widgets/aluna/eventos_section.dart';
 import '../../widgets/aluna/grade_horarios_studio_section.dart';
 import '../../widgets/aluna/plano_status_card.dart';
 import '../../widgets/common/loading_indicator.dart';
+import '../../widgets/common/notificacao_action_button.dart';
 
 /// Tela inicial da aluna com dashboard completo.
 class HomeAlunaScreen extends StatefulWidget {
@@ -71,12 +71,7 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
           appBar: AppBar(
             title: Text('Olá, $primeiroNome 👋'),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                tooltip: 'Notificações',
-                onPressed: () =>
-                    Navigator.pushNamed(context, Routes.notificacoes),
-              ),
+              const NotificacaoActionButton(),
             ],
           ),
           body: homeProvider.carregando

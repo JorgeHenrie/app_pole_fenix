@@ -98,9 +98,6 @@ class Usuario {
   /// Nível de progressão da aluna.
   final NivelAluna? nivel;
 
-  /// Indica que a aluna deve atualizar e-mail e senha no primeiro acesso.
-  final bool primeiroAcesso;
-
   const Usuario({
     required this.id,
     required this.nome,
@@ -117,7 +114,6 @@ class Usuario {
     this.motivoRejeicao,
     this.planoId,
     this.nivel,
-    this.primeiroAcesso = false,
   });
 
   factory Usuario.fromMap(Map<String, dynamic> mapa, String id) {
@@ -153,7 +149,6 @@ class Usuario {
       motivoRejeicao: mapa['motivoRejeicao'] as String?,
       planoId: mapa['planoId'] as String?,
       nivel: NivelAluna.fromValor(mapa['nivel'] as String?),
-      primeiroAcesso: mapa['primeiroAcesso'] as bool? ?? false,
     );
   }
 
@@ -177,7 +172,6 @@ class Usuario {
       'motivoRejeicao': motivoRejeicao,
       'planoId': planoId,
       'nivel': nivel?.valor,
-      'primeiroAcesso': primeiroAcesso,
     };
   }
 
@@ -195,7 +189,6 @@ class Usuario {
     String? motivoRejeicao,
     String? planoId,
     NivelAluna? nivel,
-    bool? primeiroAcesso,
   }) {
     return Usuario(
       id: id,
@@ -213,7 +206,6 @@ class Usuario {
       motivoRejeicao: motivoRejeicao ?? this.motivoRejeicao,
       planoId: planoId ?? this.planoId,
       nivel: nivel ?? this.nivel,
-      primeiroAcesso: primeiroAcesso ?? this.primeiroAcesso,
     );
   }
 }

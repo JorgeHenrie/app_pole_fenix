@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../models/assinatura.dart';
 import '../../models/despesa_studio.dart';
 import '../../models/plano.dart';
 import '../../models/usuario.dart';
@@ -537,16 +536,14 @@ class _ResumoPlano {
   final String planoId;
   final String nomePlano;
   final double valorPlano;
-  int quantidadeAlunas;
-  double faturamento;
+  int quantidadeAlunas = 0;
+  double faturamento = 0;
   final List<String> alunasPreview;
 
   _ResumoPlano({
     required this.planoId,
     required this.nomePlano,
     required this.valorPlano,
-    this.quantidadeAlunas = 0,
-    this.faturamento = 0,
     List<String>? alunasPreview,
   }) : alunasPreview = alunasPreview ?? [];
 }

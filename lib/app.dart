@@ -24,14 +24,13 @@ import 'screens/aluna/confirmar_contratacao_screen.dart';
 import 'screens/aluna/sucesso_contratacao_screen.dart';
 import 'screens/admin/home_admin_screen.dart';
 import 'screens/admin/gerenciar_horarios_screen.dart';
-import 'screens/admin/gerenciar_aulas_screen.dart';
 import 'screens/admin/gerenciar_alunas_screen.dart';
 import 'screens/admin/pagamentos_screen.dart';
-import 'screens/admin/eventos_admin_screen.dart';
 import 'screens/admin/visualizar_ocupacao_screen.dart';
 import 'screens/admin/gerenciar_planos_screen.dart';
 import 'screens/admin/aprovar_cadastros_screen.dart';
-import 'screens/auth/primeiro_acesso_screen.dart';
+import 'screens/admin/aprovar_solicitacoes_screen.dart';
+import 'screens/admin/validar_atestados_screen.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -67,10 +66,8 @@ class App extends StatelessWidget {
         Routes.eventos: (context) => const EventosScreen(),
         Routes.homeAdmin: (context) => const HomeAdminScreen(),
         Routes.gerenciarHorarios: (context) => const GerenciarHorariosScreen(),
-        Routes.gerenciarAulas: (context) => const GerenciarAulasScreen(),
         Routes.gerenciarAlunas: (context) => const GerenciarAlunasScreen(),
         Routes.pagamentos: (context) => const PagamentosScreen(),
-        Routes.eventosAdmin: (context) => const EventosAdminScreen(),
         Routes.meusHorarios: (context) => const MeusHorariosScreen(),
         Routes.minhasReposicoes: (context) => const MinhasReposicoesScreen(),
         // Contratação de plano
@@ -99,8 +96,10 @@ class App extends StatelessWidget {
             const VisualizarOcupacaoScreen(),
         Routes.gerenciarPlanos: (context) => const GerenciarPlanosScreen(),
         Routes.aprovarCadastros: (context) => const AprovarCadastrosScreen(),
+        Routes.aprovarSolicitacoes: (context) =>
+            const AprovarSolicitacoesScreen(),
+        Routes.validarAtestados: (context) => const ValidarAtestadosScreen(),
         Routes.notificacoes: (context) => const NotificacoesScreen(),
-        Routes.primeiroAcesso: (context) => const PrimeiroAcessoScreen(),
       },
     );
   }

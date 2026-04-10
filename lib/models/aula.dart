@@ -35,30 +35,41 @@ class Aula {
     this.instrutora,
   });
 
-  bool get podeSerCancelada =>
-      dataHora.difference(DateTime.now()).inHours >= 2;
+  bool get podeSerCancelada => dataHora.difference(DateTime.now()).inHours >= 2;
 
   Duration get tempoAteCancelamento => dataHora.difference(DateTime.now());
 
-  int get vagasDisponiveis =>
-      (capacidadeMaxima ?? 0) - (vagasOcupadas ?? 0);
+  int get vagasDisponiveis => (capacidadeMaxima ?? 0) - (vagasOcupadas ?? 0);
 
   bool get temVaga => vagasDisponiveis > 0;
+
+  static DateTime _parseDate(dynamic raw) {
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is String) return DateTime.parse(raw);
+    if (raw is DateTime) return raw;
+    return DateTime.now();
+  }
+
+  static DateTime? _parseDateNullable(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is String) return DateTime.parse(raw);
+    if (raw is DateTime) return raw;
+    return null;
+  }
 
   factory Aula.fromMap(Map<String, dynamic> mapa, String id) {
     return Aula(
       id: id,
       alunaId: mapa['alunaId'] as String? ?? '',
       horarioFixoId: mapa['horarioFixoId'] as String?,
-      dataHora: DateTime.parse(mapa['dataHora'] as String),
+      dataHora: _parseDate(mapa['dataHora']),
       modalidade: mapa['modalidade'] as String? ?? '',
       status: mapa['status'] as String,
       motivoCancelamento: mapa['motivoCancelamento'] as String?,
-      dataCancelamento: mapa['dataCancelamento'] != null
-          ? DateTime.parse(mapa['dataCancelamento'] as String)
-          : null,
+      dataCancelamento: _parseDateNullable(mapa['dataCancelamento']),
       dentroDosPrazo: mapa['dentroDosPrazo'] as bool? ?? true,
-      criadaEm: DateTime.parse(mapa['criadaEm'] as String),
+      criadaEm: _parseDate(mapa['criadaEm']),
       titulo: mapa['titulo'] as String?,
       duracaoMinutos: mapa['duracaoMinutos'] as int?,
       capacidadeMaxima: mapa['capacidadeMaxima'] as int?,
@@ -68,32 +79,7 @@ class Aula {
   }
 
   factory Aula.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final mapa = doc.data()!;
-    return Aula(
-      id: doc.id,
-      alunaId: mapa['alunaId'] as String? ?? '',
-      horarioFixoId: mapa['horarioFixoId'] as String?,
-      dataHora: (mapa['dataHora'] is Timestamp)
-          ? (mapa['dataHora'] as Timestamp).toDate()
-          : DateTime.parse(mapa['dataHora'] as String),
-      modalidade: mapa['modalidade'] as String? ?? '',
-      status: mapa['status'] as String,
-      motivoCancelamento: mapa['motivoCancelamento'] as String?,
-      dataCancelamento: mapa['dataCancelamento'] != null
-          ? (mapa['dataCancelamento'] is Timestamp
-              ? (mapa['dataCancelamento'] as Timestamp).toDate()
-              : DateTime.parse(mapa['dataCancelamento'] as String))
-          : null,
-      dentroDosPrazo: mapa['dentroDosPrazo'] as bool? ?? true,
-      criadaEm: (mapa['criadaEm'] is Timestamp)
-          ? (mapa['criadaEm'] as Timestamp).toDate()
-          : DateTime.parse(mapa['criadaEm'] as String),
-      titulo: mapa['titulo'] as String?,
-      duracaoMinutos: mapa['duracaoMinutos'] as int?,
-      capacidadeMaxima: mapa['capacidadeMaxima'] as int?,
-      vagasOcupadas: mapa['vagasOcupadas'] as int?,
-      instrutora: mapa['instrutora'] as String?,
-    );
+    return Aula.fromMap(doc.data()!, doc.id);
   }
 
   Map<String, dynamic> toMap() {
