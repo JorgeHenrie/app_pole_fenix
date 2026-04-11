@@ -111,7 +111,7 @@ class AlunaDrawer extends StatelessWidget {
                     ),
                     _DrawerItem(
                       icone: Icons.credit_card,
-                      rotulo: 'Meu Plano',
+                      rotulo: 'Planos',
                       cor: AppColors.accentCocoa,
                       rota: Routes.meuPlano,
                     ),

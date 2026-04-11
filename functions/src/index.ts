@@ -738,6 +738,108 @@ export const notificarStatusCadastro = onDocumentUpdated(
   }
 );
 
+export const notificarSolicitacaoMigracaoPlanoPendente = onDocumentWritten(
+  {
+    document: "solicitacoes_migracao_plano/{solicitacaoId}",
+    region: REGION,
+  },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!depois) return;
+    if (depois.status !== "pendente") return;
+    if (antes?.status === "pendente") return;
+
+    const adminIds = await listarAdminsAtivos();
+    if (adminIds.length === 0) return;
+
+    const nomeAluna =
+      typeof depois.alunaNome === "string" && depois.alunaNome.trim().length > 0
+        ? depois.alunaNome
+        : "Uma aluna";
+    const planoAtual =
+      typeof depois.planoAtualNome === "string" &&
+      depois.planoAtualNome.trim().length > 0
+        ? depois.planoAtualNome
+        : "plano atual";
+    const planoDestino =
+      typeof depois.planoDestinoNome === "string" &&
+      depois.planoDestinoNome.trim().length > 0
+        ? depois.planoDestinoNome
+        : "novo plano";
+
+    await notificarUsuarios(adminIds, {
+      titulo: "Nova migração de plano pendente",
+      mensagem: `${nomeAluna} solicitou migração de ${planoAtual} para ${planoDestino}.`,
+      tipo: "migracao_plano_pendente",
+      referenciaId: event.params.solicitacaoId,
+      dados: {
+        tipo: "migracao_plano_pendente",
+        solicitacaoId: event.params.solicitacaoId,
+      },
+    });
+  }
+);
+
+export const notificarStatusMigracaoPlano = onDocumentUpdated(
+  {
+    document: "solicitacoes_migracao_plano/{solicitacaoId}",
+    region: REGION,
+  },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!antes || !depois) return;
+    if (antes.status === depois.status) return;
+    if (typeof depois.alunaId !== "string" || depois.alunaId.trim().length === 0) {
+      return;
+    }
+
+    const planoDestino =
+      typeof depois.planoDestinoNome === "string" &&
+      depois.planoDestinoNome.trim().length > 0
+        ? depois.planoDestinoNome
+        : "novo plano";
+
+    if (depois.status === "aprovada") {
+      await notificarUsuario(depois.alunaId, {
+        titulo: "Migração de plano aprovada",
+        mensagem: `Seu plano foi atualizado para ${planoDestino}. O acesso já segue as regras do novo plano.`,
+        tipo: "migracao_plano_status",
+        referenciaId: event.params.solicitacaoId,
+        dados: {
+          tipo: "migracao_plano_status",
+          status: "aprovada",
+          solicitacaoId: event.params.solicitacaoId,
+        },
+      });
+      return;
+    }
+
+    if (depois.status === "rejeitada") {
+      const respostaAdmin =
+        typeof depois.respostaAdmin === "string" &&
+        depois.respostaAdmin.trim().length > 0
+          ? ` Motivo: ${depois.respostaAdmin}`
+          : "";
+
+      await notificarUsuario(depois.alunaId, {
+        titulo: "Migração de plano não aprovada",
+        mensagem: `Sua solicitação para ${planoDestino} não foi aprovada.${respostaAdmin}`,
+        tipo: "migracao_plano_status",
+        referenciaId: event.params.solicitacaoId,
+        dados: {
+          tipo: "migracao_plano_status",
+          status: "rejeitada",
+          solicitacaoId: event.params.solicitacaoId,
+        },
+      });
+    }
+  }
+);
+
 export const notificarResultadoAtestado = onDocumentUpdated(
   { document: "aulas/{aulaId}", region: REGION },
   async (event) => {

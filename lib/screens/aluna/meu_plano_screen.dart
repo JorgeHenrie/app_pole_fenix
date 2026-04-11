@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -9,11 +10,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/assinatura.dart';
 import '../../models/plano.dart';
+import '../../models/solicitacao_migracao_plano.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/home_aluna_provider.dart';
+import '../../providers/plano_provider.dart';
+import '../../repositories/solicitacao_migracao_plano_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
 
-/// Tela com detalhes do plano da aluna, contrato PDF e termo de aceite.
+/// Tela de planos da aluna, com detalhes, documentos e solicitação de migração.
 class MeuPlanoScreen extends StatefulWidget {
   const MeuPlanoScreen({super.key});
 
@@ -22,20 +26,73 @@ class MeuPlanoScreen extends StatefulWidget {
 }
 
 class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
+  static const String _chavePixMigracao = '04792088240';
+
+  final SolicitacaoMigracaoPlanoRepository _migracaoRepo =
+      SolicitacaoMigracaoPlanoRepository();
+
+  String? _planoExpandidoId;
+  String? _planoSolicitandoId;
+  bool _carregandoSolicitacoes = false;
+  SolicitacaoMigracaoPlano? _solicitacaoPendente;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = context.read<HomeAlunaProvider>();
-      if (provider.assinatura == null && !provider.carregando) {
-        final usuario = context.read<AuthProvider>().usuario;
-        if (usuario != null) provider.carregarDados(usuario.id);
+      final homeProvider = context.read<HomeAlunaProvider>();
+      final planoProvider = context.read<PlanoProvider>();
+      final usuario = context.read<AuthProvider>().usuario;
+
+      if (homeProvider.assinatura == null && !homeProvider.carregando) {
+        if (usuario != null) {
+          homeProvider.carregarDados(usuario.id);
+        }
+      }
+
+      if (!planoProvider.carregando && planoProvider.planos.isEmpty) {
+        planoProvider.carregarPlanos();
+      }
+
+      if (usuario != null) {
+        _carregarSolicitacaoPendente(usuario.id);
       }
     });
   }
 
+  Future<void> _carregarSolicitacaoPendente(String alunaId) async {
+    setState(() => _carregandoSolicitacoes = true);
+
+    SolicitacaoMigracaoPlano? solicitacao;
+    try {
+      solicitacao = await _migracaoRepo.buscarPendentePorAluna(alunaId);
+    } catch (_) {
+      solicitacao = null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _solicitacaoPendente = solicitacao;
+      _carregandoSolicitacoes = false;
+    });
+  }
+
+  Future<void> _recarregarDados() async {
+    final usuario = context.read<AuthProvider>().usuario;
+    if (usuario == null) return;
+
+    await Future.wait([
+      context.read<HomeAlunaProvider>().carregarDados(usuario.id),
+      context.read<PlanoProvider>().carregarPlanos(),
+      _carregarSolicitacaoPendente(usuario.id),
+    ]);
+  }
+
   Future<void> _baixarContrato(
-      Assinatura assinatura, Plano plano, String nomeAluna) async {
+    Assinatura assinatura,
+    Plano plano,
+    String nomeAluna,
+  ) async {
     final doc = pw.Document();
     final currencyFormat =
         NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
@@ -109,6 +166,248 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
     await Printing.layoutPdf(onLayout: (_) async => doc.save());
   }
 
+  Future<void> _solicitarMigracao({
+    required Assinatura assinaturaAtual,
+    required Plano planoAtual,
+    required Plano planoDestino,
+    required String nomeAluna,
+  }) async {
+    if (_solicitacaoPendente != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Você já possui uma solicitação de migração aguardando análise.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final moeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+        var pixCopiado = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+              contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Migrar para',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    planoDestino.nome,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      height: 1.1,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: AppColors.primaryLight.withValues(alpha: 0.28),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildDialogInfo('Plano atual', planoAtual.nome),
+                        _buildDialogInfo('Novo plano', planoDestino.nome),
+                        _buildDialogInfo(
+                          'Valor mensal',
+                          moeda.format(planoDestino.preco),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Chave Pix (CPF)',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: AppColors.primaryLight.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _chavePixMigracao,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              const ClipboardData(text: _chavePixMigracao),
+                            );
+                            setDialogState(() => pixCopiado = true);
+                          },
+                          icon: Icon(
+                            pixCopiado
+                                ? Icons.check_rounded
+                                : Icons.copy_outlined,
+                            size: 18,
+                          ),
+                          label: Text(pixCopiado ? 'Copiado' : 'Copiar'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Voltar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Solicitar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmar != true) return;
+
+    final usuario = context.read<AuthProvider>().usuario;
+    if (usuario == null) return;
+
+    setState(() => _planoSolicitandoId = planoDestino.id);
+
+    try {
+      final solicitacao = SolicitacaoMigracaoPlano(
+        id: '',
+        alunaId: usuario.id,
+        alunaNome: nomeAluna,
+        assinaturaId: assinaturaAtual.id,
+        planoAtualId: planoAtual.id,
+        planoAtualNome: planoAtual.nome,
+        planoDestinoId: planoDestino.id,
+        planoDestinoNome: planoDestino.nome,
+        valorPlanoDestino: planoDestino.preco,
+        chavePix: _chavePixMigracao,
+        status: 'pendente',
+        solicitadoEm: DateTime.now(),
+      );
+
+      await _migracaoRepo.criar(solicitacao);
+      await _carregarSolicitacaoPendente(usuario.id);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Solicitação de migração para ${planoDestino.nome} enviada.',
+          ),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      final mensagem = e.message?.toString() ?? e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensagem)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao solicitar migração: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _planoSolicitandoId = null);
+      }
+    }
+  }
+
+  Widget _buildDialogInfo(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _mostrarTermoAceite() {
     showModalBottomSheet(
       context: context,
@@ -129,35 +428,90 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
     );
   }
 
+  List<Plano> _ordenarPlanos(List<Plano> planos, Plano? planoAtual) {
+    final lista = [...planos];
+
+    if (planoAtual != null &&
+        !lista.any((plano) => plano.id == planoAtual.id)) {
+      lista.add(planoAtual);
+    }
+
+    lista.sort((a, b) {
+      if (planoAtual != null) {
+        if (a.id == planoAtual.id) return -1;
+        if (b.id == planoAtual.id) return 1;
+      }
+
+      final porPreco = a.preco.compareTo(b.preco);
+      if (porPreco != 0) return porPreco;
+      return a.nome.compareTo(b.nome);
+    });
+
+    return lista;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Meu Plano')),
-      body: Consumer2<HomeAlunaProvider, AuthProvider>(
-        builder: (context, homeProvider, authProvider, _) {
-          if (homeProvider.carregando) return const LoadingIndicator();
-
-          final assinatura = homeProvider.assinatura;
-          final plano = homeProvider.plano;
-
-          if (assinatura == null || plano == null) {
-            return _buildSemPlano();
+      appBar: AppBar(title: const Text('Planos')),
+      body: Consumer3<HomeAlunaProvider, AuthProvider, PlanoProvider>(
+        builder: (context, homeProvider, authProvider, planoProvider, _) {
+          if (homeProvider.carregando ||
+              _carregandoSolicitacoes ||
+              (planoProvider.carregando && planoProvider.planos.isEmpty)) {
+            return const LoadingIndicator();
           }
 
+          final assinatura = homeProvider.assinatura;
+          final planoAtual = homeProvider.plano;
           final nomeAluna = authProvider.usuario?.nome ?? 'Aluna';
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (assinatura == null || planoAtual == null) {
+            return _buildSemPlano(planoProvider.erro);
+          }
+
+          final planos = _ordenarPlanos(planoProvider.planos, planoAtual);
+
+          return RefreshIndicator(
+            onRefresh: _recarregarDados,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                _buildStatusCard(assinatura, plano),
-                const SizedBox(height: 16),
-                _buildDetalhesCard(assinatura, plano),
-                const SizedBox(height: 24),
-                _buildAcoes(assinatura, plano, nomeAluna),
-                const SizedBox(height: 32),
+                if (planoProvider.erro != null) ...[
+                  _buildErroPlanos(planoProvider.erro!),
+                  const SizedBox(height: 16),
+                ],
+                if (_solicitacaoPendente != null) ...[
+                  _buildSolicitacaoPendenteBanner(_solicitacaoPendente!),
+                  const SizedBox(height: 16),
+                ],
+                ...planos.map(
+                  (plano) {
+                    final ativo = plano.id == planoAtual.id;
+                    final expandido = _planoExpandidoId == plano.id;
+                    final pendenteMesmoPlano =
+                        _solicitacaoPendente?.planoDestinoId == plano.id;
+                    final possuiSolicitacaoPendente =
+                        _solicitacaoPendente != null;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _buildPlanoCardExpansivel(
+                        assinaturaAtual: assinatura,
+                        planoAtual: planoAtual,
+                        plano: plano,
+                        ativo: ativo,
+                        expandido: expandido,
+                        pendenteMesmoPlano: pendenteMesmoPlano,
+                        possuiSolicitacaoPendente: possuiSolicitacaoPendente,
+                        nomeAluna: nomeAluna,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
               ],
             ),
           );
@@ -166,127 +520,462 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
     );
   }
 
-  Widget _buildSemPlano() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.credit_card_off_outlined,
-                size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'Nenhum plano ativo',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.grey.shade600,
-                  ),
-            ),
-          ],
+  Widget _buildSemPlano(String? erro) {
+    return ListView(
+      padding: const EdgeInsets.all(32),
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        if (erro != null) ...[
+          _buildErroPlanos(erro),
+          const SizedBox(height: 24),
+        ],
+        const SizedBox(height: 80),
+        Icon(
+          Icons.credit_card_off_outlined,
+          size: 64,
+          color: Colors.grey.shade400,
         ),
-      ),
+        const SizedBox(height: 16),
+        Text(
+          'Nenhum plano ativo',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Quando houver uma assinatura ativa, seus planos aparecerão aqui.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+      ],
     );
   }
 
-  Widget _buildStatusCard(Assinatura assinatura, Plano plano) {
-    final ativa = assinatura.estaAtiva;
-    final currencyFormat =
-        NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-
+  Widget _buildErroPlanos(String mensagem) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: ativa
-              ? [AppColors.primary, AppColors.primaryLight]
-              : [Colors.grey.shade600, Colors.grey.shade400],
-        ),
+        color: AppColors.warning.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.22)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              const Icon(Icons.workspace_premium,
-                  color: Colors.white, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  plano.nome,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  ativa ? 'ATIVO' : assinatura.status.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '${currencyFormat.format(plano.preco)}/mês',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
+          const Icon(Icons.info_outline, color: AppColors.warning),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              mensagem,
+              style: const TextStyle(color: AppColors.textSecondary),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            plano.descricao,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          TextButton(
+            onPressed: () => context.read<PlanoProvider>().carregarPlanos(),
+            child: const Text('Tentar de novo'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDetalhesCard(Assinatura assinatura, Plano plano) {
+  Widget _buildSolicitacaoPendenteBanner(
+    SolicitacaoMigracaoPlano solicitacao,
+  ) {
+    final moeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.info.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.hourglass_top_rounded, color: AppColors.info),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Solicitação de migração em análise',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Destino: ${solicitacao.planoDestinoNome} • ${moeda.format(solicitacao.valorPlanoDestino)}',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Assim que o admin aprovar, este plano passa a valer no seu acesso.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanoCardExpansivel({
+    required Assinatura assinaturaAtual,
+    required Plano planoAtual,
+    required Plano plano,
+    required bool ativo,
+    required bool expandido,
+    required bool pendenteMesmoPlano,
+    required bool possuiSolicitacaoPendente,
+    required String nomeAluna,
+  }) {
+    final currencyFormat =
+        NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+    final tituloAcao = pendenteMesmoPlano
+        ? 'Solicitado'
+        : possuiSolicitacaoPendente
+            ? 'Aguardando'
+            : 'Migrar';
+
+    final acaoDesabilitada = ativo || possuiSolicitacaoPendente;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () {
+              setState(() {
+                _planoExpandidoId = expandido ? null : plano.id;
+              });
+            },
+            child: Ink(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: ativo
+                      ? [AppColors.primaryDark, AppColors.accentCocoa]
+                      : [
+                          const Color(0xFF6C2436),
+                          const Color(0xFF8B4D5D),
+                        ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: ativo ? 0.12 : 0.22),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primaryDark
+                        .withValues(alpha: ativo ? 0.14 : 0.18),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.workspace_premium_outlined,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          plano.nome,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (ativo)
+                        _buildStatusChip(
+                          assinaturaAtual.estaAtiva
+                              ? 'PLANO ATUAL'
+                              : assinaturaAtual.status.toUpperCase(),
+                        )
+                      else
+                        FilledButton(
+                          onPressed: acaoDesabilitada ||
+                                  _planoSolicitandoId == plano.id
+                              ? null
+                              : () => _solicitarMigracao(
+                                    assinaturaAtual: assinaturaAtual,
+                                    planoAtual: planoAtual,
+                                    planoDestino: plano,
+                                    nomeAluna: nomeAluna,
+                                  ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.primaryDark,
+                            disabledBackgroundColor:
+                                Colors.white.withValues(alpha: 0.26),
+                            disabledForegroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          child: _planoSolicitandoId == plano.id
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                )
+                              : Text(
+                                  tituloAcao,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '${currencyFormat.format(plano.preco)}/mês',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    plano.descricao,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(
+                        expandido
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white70,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        expandido
+                            ? 'Toque para recolher detalhes'
+                            : 'Toque para ver detalhes',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 220),
+          crossFadeState:
+              expandido ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox.shrink(),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: _buildConteudoExpandido(
+              assinaturaAtual: assinaturaAtual,
+              planoAtual: planoAtual,
+              planoExibido: plano,
+              ativo: ativo,
+              pendenteMesmoPlano: pendenteMesmoPlano,
+              possuiSolicitacaoPendente: possuiSolicitacaoPendente,
+              nomeAluna: nomeAluna,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusChip(String texto) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white24,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        texto,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConteudoExpandido({
+    required Assinatura assinaturaAtual,
+    required Plano planoAtual,
+    required Plano planoExibido,
+    required bool ativo,
+    required bool pendenteMesmoPlano,
+    required bool possuiSolicitacaoPendente,
+    required String nomeAluna,
+  }) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 1.5,
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Detalhes do Plano',
+              ativo ? 'Detalhes do plano atual' : 'Detalhes deste plano',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                   ),
             ),
             const Divider(height: 24),
-            _buildDetalheItem(Icons.fitness_center, 'Aulas por mês',
-                '${plano.aulasPorMes} aulas'),
-            _buildDetalheItem(Icons.today, 'Aulas por semana',
-                '${plano.aulasSemanais} aula(s)'),
-            _buildDetalheItem(Icons.stars_outlined, 'Créditos disponíveis',
-                '${assinatura.creditosDisponiveis}'),
-            _buildDetalheItem(Icons.check_circle_outline, 'Aulas realizadas',
-                '${assinatura.aulasRealizadas}'),
-            _buildDetalheItem(Icons.event, 'Início',
-                DateFormatter.data(assinatura.dataInicio)),
-            _buildDetalheItem(Icons.autorenew, 'Próxima renovação',
-                DateFormatter.data(assinatura.dataRenovacao)),
+            if (ativo) ...[
+              _buildDetalheItem(
+                Icons.fitness_center,
+                'Aulas por mês',
+                '${planoExibido.aulasPorMes} aulas',
+              ),
+              _buildDetalheItem(
+                Icons.today,
+                'Aulas por semana',
+                '${planoExibido.aulasSemanais} aula(s)',
+              ),
+              _buildDetalheItem(
+                Icons.stars_outlined,
+                'Créditos disponíveis',
+                '${assinaturaAtual.creditosDisponiveis}',
+              ),
+              _buildDetalheItem(
+                Icons.check_circle_outline,
+                'Aulas realizadas',
+                '${assinaturaAtual.aulasRealizadas}',
+              ),
+              _buildDetalheItem(
+                Icons.event,
+                'Início',
+                DateFormatter.data(assinaturaAtual.dataInicio),
+              ),
+              _buildDetalheItem(
+                Icons.autorenew,
+                'Próxima renovação',
+                DateFormatter.data(assinaturaAtual.dataRenovacao),
+              ),
+              const SizedBox(height: 18),
+              _buildAcoes(assinaturaAtual, planoExibido, nomeAluna),
+            ] else ...[
+              _buildDetalheItem(
+                Icons.fitness_center,
+                'Aulas por mês',
+                '${planoExibido.aulasPorMes} aulas',
+              ),
+              _buildDetalheItem(
+                Icons.date_range_outlined,
+                'Aulas por semana',
+                '${planoExibido.aulasSemanais} aula(s)',
+              ),
+              _buildDetalheItem(
+                Icons.calendar_month_outlined,
+                'Ciclo do plano',
+                '${planoExibido.duracaoDias} dias',
+              ),
+              _buildDetalheItem(
+                Icons.credit_card_outlined,
+                'Valor mensal',
+                NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$')
+                    .format(planoExibido.preco),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.primaryLight.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  pendenteMesmoPlano
+                      ? 'Sua solicitação para este plano já foi enviada e está aguardando análise do admin.'
+                      : possuiSolicitacaoPendente
+                          ? 'Existe outra solicitação em análise. Aguarde a resposta do admin para pedir uma nova migração.'
+                          : 'Ao migrar, a chave Pix será copiada e o pedido seguirá para aprovação do admin antes da troca do plano.',
+                  style: const TextStyle(
+                    height: 1.4,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: possuiSolicitacaoPendente ||
+                          _planoSolicitandoId == planoExibido.id
+                      ? null
+                      : () => _solicitarMigracao(
+                            assinaturaAtual: assinaturaAtual,
+                            planoAtual: planoAtual,
+                            planoDestino: planoExibido,
+                            nomeAluna: nomeAluna,
+                          ),
+                  icon: _planoSolicitandoId == planoExibido.id
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.swap_horiz_rounded),
+                  label: Text(
+                    pendenteMesmoPlano
+                        ? 'Solicitação enviada'
+                        : possuiSolicitacaoPendente
+                            ? 'Aguardando análise do admin'
+                            : 'Migrar para este plano',
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -301,8 +990,10 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
           Icon(icone, size: 20, color: AppColors.primary),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(label,
-                style: const TextStyle(color: AppColors.textSecondary)),
+            child: Text(
+              label,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           Text(valor, style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
@@ -329,8 +1020,9 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
             padding: const EdgeInsets.symmetric(vertical: 14),
             side: const BorderSide(color: AppColors.primary),
             foregroundColor: AppColors.primary,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -342,8 +1034,9 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
             padding: const EdgeInsets.symmetric(vertical: 14),
             side: const BorderSide(color: AppColors.secondary),
             foregroundColor: AppColors.secondary,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
       ],

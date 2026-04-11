@@ -136,7 +136,7 @@ class PlanoStatusCard extends StatelessWidget {
                         color: Colors.white, size: 24),
                     const SizedBox(width: 8),
                     Text(
-                      plano?.nome ?? 'Meu Plano',
+                      plano?.nome ?? 'Planos',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../repositories/solicitacao_migracao_plano_repository.dart';
 import '../../repositories/usuario_repository.dart';
 import '../../widgets/common/notificacao_action_button.dart';
 
@@ -17,7 +18,10 @@ class HomeAdminScreen extends StatefulWidget {
 
 class _HomeAdminScreenState extends State<HomeAdminScreen> {
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
+  final SolicitacaoMigracaoPlanoRepository _migracaoPlanoRepo =
+      SolicitacaoMigracaoPlanoRepository();
   int _pendentesCount = 0;
+  int _migracoesPendentesCount = 0;
   bool _falhaAoCarregarPendentes = false;
 
   @override
@@ -28,10 +32,18 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
 
   Future<void> _carregarPendentes() async {
     try {
-      final pendentes = await _usuarioRepo.buscarPendentes();
+      final resultados = await Future.wait([
+        _usuarioRepo.buscarPendentes(),
+        _migracaoPlanoRepo.contarPendentes(),
+      ]);
+
+      final pendentes = resultados[0] as List<dynamic>;
+      final migracoesPendentes = resultados[1] as int;
+
       if (mounted) {
         setState(() {
           _pendentesCount = pendentes.length;
+          _migracoesPendentesCount = migracoesPendentes;
           _falhaAoCarregarPendentes = false;
         });
       }
@@ -136,9 +148,10 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             context,
             icon: Icons.payment,
             title: 'Pagamentos',
-            subtitle: 'Controle de pagamentos e assinaturas',
+            subtitle: 'Controle financeiro e migrações de plano',
             color: AppColors.secondary,
             rota: Routes.pagamentos,
+            badge: _migracoesPendentesCount,
           ),
         ],
       ),
@@ -165,6 +178,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
     required String subtitle,
     required Color color,
     required String rota,
+    int badge = 0,
   }) {
     return _buildMenuCardComBadge(
       context,
@@ -173,7 +187,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       subtitle: subtitle,
       color: color,
       rota: rota,
-      badge: 0,
+      badge: badge,
     );
   }
 
@@ -193,7 +207,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       child: ListTile(
         onTap: () async {
           await Navigator.pushNamed(context, rota);
-          if (rota == Routes.aprovarCadastros) {
+          if (rota == Routes.aprovarCadastros || rota == Routes.pagamentos) {
             _carregarPendentes();
           }
         },

@@ -169,6 +169,10 @@ class _NotificacoesList extends StatelessWidget {
     switch (tipo) {
       case 'cadastro_pendente':
         return Icons.person_add_alt_1_outlined;
+      case 'migracao_plano_pendente':
+        return Icons.swap_horiz_rounded;
+      case 'migracao_plano_status':
+        return Icons.credit_score_outlined;
       case 'cancelamento_tardio':
       case 'aula_cancelada':
       case 'lembrete_aula':
@@ -190,6 +194,10 @@ class _NotificacoesList extends StatelessWidget {
     switch (tipo) {
       case 'cadastro_pendente':
         return Colors.deepOrange.shade700;
+      case 'migracao_plano_pendente':
+        return AppColors.warning;
+      case 'migracao_plano_status':
+        return AppColors.success;
       case 'cancelamento_tardio':
       case 'aula_cancelada':
         return AppColors.error;

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/despesa_studio.dart';
 import '../../models/plano.dart';
+import '../../models/solicitacao_migracao_plano.dart';
 import '../../models/usuario.dart';
+import '../../providers/auth_provider.dart';
 import '../../repositories/assinatura_repository.dart';
 import '../../repositories/despesa_studio_repository.dart';
 import '../../repositories/plano_repository.dart';
+import '../../repositories/solicitacao_migracao_plano_repository.dart';
 import '../../repositories/usuario_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
 
@@ -23,6 +27,8 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
   final PlanoRepository _planoRepo = PlanoRepository();
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
   final DespesaStudioRepository _despesaRepo = DespesaStudioRepository();
+  final SolicitacaoMigracaoPlanoRepository _migracaoPlanoRepo =
+      SolicitacaoMigracaoPlanoRepository();
 
   final DateTime _mesAtual =
       DateTime(DateTime.now().year, DateTime.now().month);
@@ -33,7 +39,9 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
   int _totalAlunasAtivas = 0;
   List<_ResumoPlano> _resumoPlanos = [];
   List<DespesaStudio> _despesas = [];
+  List<SolicitacaoMigracaoPlano> _migracoesPendentes = [];
   String? _despesaExcluindoId;
+  String? _solicitacaoProcessandoId;
 
   @override
   void initState() {
@@ -47,6 +55,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
     try {
       final assinaturas = await _assinaturaRepo.listarAtivas();
       final despesas = await _despesaRepo.listarDoMes(_mesAtual);
+      final migracoesPendentes = await _migracaoPlanoRepo.listarPendentes();
 
       final planoIds = assinaturas.map((item) => item.planoId).toSet().toList();
       final alunaIds = assinaturas.map((item) => item.alunaId).toSet().toList();
@@ -112,6 +121,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
         _totalAlunasAtivas = alunasAtivas.length;
         _resumoPlanos = listaResumo;
         _despesas = despesas;
+        _migracoesPendentes = migracoesPendentes;
       });
     } catch (e) {
       if (mounted) {
@@ -218,6 +228,50 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
     }
   }
 
+  Future<void> _responderMigracao(
+    SolicitacaoMigracaoPlano solicitacao,
+    String status,
+    String? respostaAdmin,
+  ) async {
+    final adminId = context.read<AuthProvider>().usuario?.id;
+    if (adminId == null) return;
+
+    setState(() => _solicitacaoProcessandoId = solicitacao.id);
+
+    try {
+      await _migracaoPlanoRepo.responder(
+        solicitacaoId: solicitacao.id,
+        status: status,
+        respostaAdmin: respostaAdmin,
+        adminId: adminId,
+      );
+
+      await _carregarDados();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == 'aprovada'
+                ? 'Migração para ${solicitacao.planoDestinoNome} aprovada.'
+                : 'Migração para ${solicitacao.planoDestinoNome} rejeitada.',
+          ),
+          backgroundColor:
+              status == 'aprovada' ? AppColors.success : AppColors.error,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao responder migração: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _solicitacaoProcessandoId = null);
+      }
+    }
+  }
+
   String _moeda(double valor) {
     return NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(valor);
   }
@@ -299,6 +353,44 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                     lucro: _moeda(lucro),
                     status:
                         lucro >= 0 ? 'Operação saudável' : 'Atenção ao caixa',
+                  ),
+                  const SizedBox(height: 16),
+                  _SecaoCard(
+                    titulo: 'Migrações de plano pendentes',
+                    subtitulo:
+                        'Confirme o Pix e aprove ou rejeite a troca de plano da aluna',
+                    acao: _MetricPill(
+                      label: '${_migracoesPendentes.length} pendente(s)',
+                      color: _migracoesPendentes.isEmpty
+                          ? AppColors.greyDark
+                          : AppColors.warning,
+                    ),
+                    child: _migracoesPendentes.isEmpty
+                        ? const _EstadoVazioSecao(
+                            mensagem:
+                                'Nenhuma migração de plano aguardando aprovação.',
+                          )
+                        : Column(
+                            children: _migracoesPendentes
+                                .map(
+                                  (solicitacao) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _SolicitacaoMigracaoPlanoTile(
+                                      solicitacao: solicitacao,
+                                      formatarMoeda: _moeda,
+                                      processando: _solicitacaoProcessandoId ==
+                                          solicitacao.id,
+                                      onResponder: (status, resposta) =>
+                                          _responderMigracao(
+                                        solicitacao,
+                                        status,
+                                        resposta,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
                   ),
                   const SizedBox(height: 16),
                   LayoutBuilder(
@@ -546,6 +638,210 @@ class _ResumoPlano {
     required this.valorPlano,
     List<String>? alunasPreview,
   }) : alunasPreview = alunasPreview ?? [];
+}
+
+class _SolicitacaoMigracaoPlanoTile extends StatelessWidget {
+  final SolicitacaoMigracaoPlano solicitacao;
+  final String Function(double valor) formatarMoeda;
+  final bool processando;
+  final Future<void> Function(String status, String? resposta) onResponder;
+
+  const _SolicitacaoMigracaoPlanoTile({
+    required this.solicitacao,
+    required this.formatarMoeda,
+    required this.processando,
+    required this.onResponder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final solicitadoEm = DateFormat(
+      'dd/MM/yyyy HH:mm',
+      'pt_BR',
+    ).format(solicitacao.solicitadoEm);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.primaryLight.withValues(alpha: 0.2),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.swap_horiz_rounded,
+                  color: AppColors.warning,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      solicitacao.alunaNome,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Solicitado em $solicitadoEm',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Pendente',
+                  style: TextStyle(
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '${solicitacao.planoAtualNome} -> ${solicitacao.planoDestinoNome}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Valor informado para pagamento: ${formatarMoeda(solicitacao.valorPlanoDestino)}',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Chave Pix usada pela aluna: ${solicitacao.chavePix}',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: processando
+                      ? null
+                      : () => _abrirDialogoResposta(context, 'rejeitada'),
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text('Rejeitar'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: processando
+                      ? null
+                      : () => _abrirDialogoResposta(context, 'aprovada'),
+                  icon: processando
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_rounded),
+                  label: Text(processando ? 'Processando' : 'Aprovar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _abrirDialogoResposta(
+      BuildContext context, String status) async {
+    final controller = TextEditingController();
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          status == 'aprovada'
+              ? 'Aprovar migração de plano'
+              : 'Rejeitar migração de plano',
+        ),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: status == 'aprovada'
+                ? 'Comentário para a aluna (opcional)'
+                : 'Motivo da rejeição (opcional)',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      await onResponder(
+        status,
+        controller.text.trim().isEmpty ? null : controller.text.trim(),
+      );
+    }
+
+    controller.dispose();
+  }
 }
 
 class _PainelHeader extends StatelessWidget {
