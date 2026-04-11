@@ -33,13 +33,14 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
         if (!mounted) return;
         final homeProvider = context.read<HomeAlunaProvider>();
         final gradeProvider = context.read<GradeHorarioProvider>();
-        await homeProvider.carregarDados(usuario.id);
-        if (mounted) {
-          gradeProvider.carregar(
+        await homeProvider.carregarDados(
+          usuario.id,
+          tarefaParalela: (assinatura) => gradeProvider.carregar(
             usuario.id,
-            assinatura: homeProvider.assinatura,
-          );
-        }
+            assinatura: assinatura,
+            nomeAluna: usuario.nome,
+          ),
+        );
       });
     }
   }
@@ -50,10 +51,14 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
     final gradeProvider = context.read<GradeHorarioProvider>();
     final usuario = authProvider.usuario;
     if (usuario != null) {
-      await homeProvider.carregarDados(usuario.id);
-      if (mounted) {
-        gradeProvider.carregar(usuario.id, assinatura: homeProvider.assinatura);
-      }
+      await homeProvider.carregarDados(
+        usuario.id,
+        tarefaParalela: (assinatura) => gradeProvider.carregar(
+          usuario.id,
+          assinatura: assinatura,
+          nomeAluna: usuario.nome,
+        ),
+      );
     }
   }
 
@@ -69,7 +74,7 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
           backgroundColor: AppColors.background,
           drawer: const AlunaDrawer(),
           appBar: AppBar(
-            title: Text('Olá, $primeiroNome 👋'),
+            title: Text('Olá, $primeiroNome'),
             actions: [
               const NotificacaoActionButton(),
             ],

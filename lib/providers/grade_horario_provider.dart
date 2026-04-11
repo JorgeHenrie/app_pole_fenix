@@ -68,7 +68,11 @@ class GradeHorarioProvider extends ChangeNotifier {
   ///
   /// [assinatura] define o limite da data de busca (dataRenovacao).
   /// Se não informado, usa os próximos 14 dias.
-  Future<void> carregar(String alunaId, {Assinatura? assinatura}) async {
+  Future<void> carregar(
+    String alunaId, {
+    Assinatura? assinatura,
+    String? nomeAluna,
+  }) async {
     _carregando = true;
     _erro = null;
     notifyListeners();
@@ -83,12 +87,17 @@ class GradeHorarioProvider extends ChangeNotifier {
       _reposicoesPendentes = resultados[1] as List<Reposicao>;
       _horariosDaAluna = resultados[2] as List<HorarioFixo>;
 
-      final alunaDoc = await FirebaseFirestore.instance
-          .collection('usuarios')
-          .doc(alunaId)
-          .get();
-      final nomeAluna = alunaDoc.data()?['nome'] as String? ?? '';
-      _primeiroNomeAluna = nomeAluna.trim().split(' ').first;
+      final nomeInformado = nomeAluna?.trim() ?? '';
+      if (nomeInformado.isNotEmpty) {
+        _primeiroNomeAluna = nomeInformado.split(' ').first;
+      } else {
+        final alunaDoc = await FirebaseFirestore.instance
+            .collection('usuarios')
+            .doc(alunaId)
+            .get();
+        final nomeBuscado = alunaDoc.data()?['nome'] as String? ?? '';
+        _primeiroNomeAluna = nomeBuscado.trim().split(' ').first;
+      }
 
       final agora = DateTime.now();
       // Limita ao período do contrato vigente ou próximos 14 dias
@@ -113,18 +122,14 @@ class GradeHorarioProvider extends ChangeNotifier {
         return d != 0 ? d : a.horario.compareTo(b.horario);
       });
 
-      // Busca os nomes fixos UMA VEZ por slot (são os mesmos em todas as semanas)
-      final Map<String, List<String>> nomesFixosPorSlot = {};
-      await Future.wait(grade.map((g) async {
-        final chave = '${g.diaSemana}_${g.horario}';
-        try {
-          nomesFixosPorSlot[chave] =
-              await _gradeRepo.buscarNomesFixosPorSlot(g.diaSemana, g.horario);
-        } catch (e) {
-          debugPrint('buscarNomesFixosPorSlot erro [$chave]: $e');
-          nomesFixosPorSlot[chave] = [];
-        }
-      }));
+      final nomesFixosPorSlot =
+          await _gradeRepo.buscarNomesFixosPorSlots(grade);
+      final nomesReposicoesPorSlot =
+          await _gradeRepo.buscarNomesReposicoesPorPeriodo(
+        gradeHorarioIds: grade.map((g) => g.id),
+        inicio: inicioSemana,
+        limite: limite,
+      );
 
       final slots = <SlotDia>[];
 
@@ -146,14 +151,9 @@ class GradeHorarioProvider extends ChangeNotifier {
 
           // Inclui todos os slots da semana atual (mesmo passados) e futuros
           if (!dataHora.isBefore(inicioSemana)) {
-            // Busca reposições agendadas nesta data/slot específica
-            List<String> nomesRepo = [];
-            try {
-              nomesRepo =
-                  await _gradeRepo.buscarNomesReposicoesPorSlot(g.id, dataHora);
-            } catch (e) {
-              debugPrint('buscarNomesReposicoesPorSlot erro: $e');
-            }
+            final nomesRepo =
+                nomesReposicoesPorSlot[_chaveReposicaoSlot(g.id, dataHora)] ??
+                    const <String>[];
             final todos = [...nomesFixos, ...nomesRepo];
             final slotKey = _chaveSlot(g.diaSemana, g.horario, dataHora);
 
@@ -193,10 +193,11 @@ class GradeHorarioProvider extends ChangeNotifier {
     required DateTime inicio,
     required DateTime limite,
   }) async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('aulas')
-        .where('alunaId', isEqualTo: alunaId)
-        .get();
+    final aulas = await _aulaRepo.buscarPorAlunaNoPeriodo(
+      alunaId,
+      inicio: inicio,
+      limite: limite,
+    );
 
     final horariosPorId = {
       for (final horario in _horariosDaAluna) horario.id: horario,
@@ -205,8 +206,7 @@ class GradeHorarioProvider extends ChangeNotifier {
     final slotsAtivos = <String>{};
     final slotsCancelados = <String>{};
 
-    for (final doc in snapshot.docs) {
-      final aula = Aula.fromFirestore(doc);
+    for (final aula in aulas) {
       if (aula.horarioFixoId == null) continue;
 
       final horario = horariosPorId[aula.horarioFixoId!];
@@ -429,20 +429,16 @@ class GradeHorarioProvider extends ChangeNotifier {
           s.dataHora == slot.dataHora);
       if (idx >= 0) {
         final s = _slots[idx];
-        final nomeAluna = (await FirebaseFirestore.instance
-                    .collection('usuarios')
-                    .doc(alunaId)
-                    .get())
-                .data()?['nome'] as String? ??
-            '';
-        final primeiroNome = nomeAluna.trim().split(' ').first.toLowerCase();
-        _slots[idx] = SlotDia(
-          gradeHorario: s.gradeHorario,
-          dataHora: s.dataHora,
-          nomesMatriculados: s.nomesMatriculados
-              .where((n) => n.toLowerCase() != primeiroNome)
-              .toList(),
-        );
+        final primeiroNome = _primeiroNomeAluna?.toLowerCase();
+        if (primeiroNome != null && primeiroNome.isNotEmpty) {
+          _slots[idx] = SlotDia(
+            gradeHorario: s.gradeHorario,
+            dataHora: s.dataHora,
+            nomesMatriculados: s.nomesMatriculados
+                .where((n) => n.toLowerCase() != primeiroNome)
+                .toList(),
+          );
+        }
       }
       final slotKey = _chaveSlot(
         slot.gradeHorario.diaSemana,
@@ -502,5 +498,9 @@ class GradeHorarioProvider extends ChangeNotifier {
 
   static String _chaveSlot(int diaSemana, String horario, DateTime dataHora) {
     return '$diaSemana|$horario|${dataHora.toIso8601String()}';
+  }
+
+  static String _chaveReposicaoSlot(String gradeHorarioId, DateTime dataHora) {
+    return '$gradeHorarioId|${dataHora.toIso8601String()}';
   }
 }

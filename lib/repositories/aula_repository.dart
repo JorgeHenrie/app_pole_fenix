@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/aula.dart';
 import '../services/firebase/firestore_service.dart';
@@ -13,6 +14,10 @@ class AulaRepository {
         a.day == b.day &&
         a.hour == b.hour &&
         a.minute == b.minute;
+  }
+
+  bool _estaNoPeriodo(DateTime dataHora, DateTime inicio, DateTime limite) {
+    return !dataHora.isBefore(inicio) && !dataHora.isAfter(limite);
   }
 
   Future<Aula?> buscarPorId(String id) async {
@@ -72,6 +77,62 @@ class AulaRepository {
         .toList()
       ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
     return aulas.take(limite).toList();
+  }
+
+  Future<List<Aula>> buscarPorAlunaNoPeriodo(
+    String alunaId, {
+    required DateTime inicio,
+    required DateTime limite,
+  }) async {
+    final docsPorId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    var consultaPorPeriodoExecutada = false;
+
+    Future<void> tentarConsultaPorPeriodo(
+      dynamic inicioFiltro,
+      dynamic limiteFiltro,
+    ) async {
+      try {
+        final snapshot = await _firestore
+            .colecao(_colecao)
+            .where('alunaId', isEqualTo: alunaId)
+            .where('dataHora', isGreaterThanOrEqualTo: inicioFiltro)
+            .where('dataHora', isLessThanOrEqualTo: limiteFiltro)
+            .get();
+        consultaPorPeriodoExecutada = true;
+        for (final doc in snapshot.docs) {
+          docsPorId[doc.id] = doc;
+        }
+      } catch (e) {
+        debugPrint('AulaRepository.buscarPorAlunaNoPeriodo: $e');
+      }
+    }
+
+    await tentarConsultaPorPeriodo(
+      inicio.toIso8601String(),
+      limite.toIso8601String(),
+    );
+    await tentarConsultaPorPeriodo(
+      Timestamp.fromDate(inicio),
+      Timestamp.fromDate(limite),
+    );
+
+    if (!consultaPorPeriodoExecutada) {
+      final snapshot = await _firestore
+          .colecao(_colecao)
+          .where('alunaId', isEqualTo: alunaId)
+          .get();
+      for (final doc in snapshot.docs) {
+        docsPorId[doc.id] = doc;
+      }
+    }
+
+    final aulas = docsPorId.values
+        .map((doc) => Aula.fromFirestore(doc))
+        .where((aula) => _estaNoPeriodo(aula.dataHora, inicio, limite))
+        .toList()
+      ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+
+    return aulas;
   }
 
   Future<bool> aulaJaExiste(String horarioFixoId, DateTime dataHora) async {

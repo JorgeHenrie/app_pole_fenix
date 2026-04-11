@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/grade_horario.dart';
 import '../services/firebase/firestore_service.dart';
@@ -6,6 +7,21 @@ import '../services/firebase/firestore_service.dart';
 class GradeHorarioRepository {
   static const String _colecao = 'grade_horarios';
   final FirestoreService _firestore = FirestoreService();
+
+  static String _chaveSlot(int diaSemana, String horario) {
+    return '${diaSemana}_$horario';
+  }
+
+  static String _chaveReposicao(String gradeHorarioId, DateTime dataHora) {
+    return '$gradeHorarioId|${dataHora.toIso8601String()}';
+  }
+
+  DateTime? _parseDateNullable(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
 
   Future<List<GradeHorario>> listarAtivos() async {
     final snapshot = await _firestore
@@ -79,6 +95,103 @@ class GradeHorarioRepository {
     );
   }
 
+  Future<Map<String, List<String>>> buscarNomesFixosPorSlots(
+    Iterable<GradeHorario> grades,
+  ) async {
+    final gradeList = grades.toList();
+    if (gradeList.isEmpty) return {};
+
+    final chavesValidas = {
+      for (final grade in gradeList) _chaveSlot(grade.diaSemana, grade.horario),
+    };
+
+    final snapshot = await _firestore
+        .colecao('horarios_fixos')
+        .where('ativo', isEqualTo: true)
+        .get();
+
+    final alunaIdsPorSlot = <String, List<String>>{};
+    final todosAlunaIds = <String>{};
+
+    for (final doc in snapshot.docs) {
+      final dados = doc.data();
+      final diaSemana = dados['diaSemana'] as int?;
+      final horario = dados['horario'] as String?;
+      final alunaId = dados['alunaId'] as String?;
+      if (diaSemana == null || horario == null || alunaId == null) continue;
+
+      final chave = _chaveSlot(diaSemana, horario);
+      if (!chavesValidas.contains(chave)) continue;
+
+      final ids = alunaIdsPorSlot.putIfAbsent(chave, () => []);
+      if (!ids.contains(alunaId)) {
+        ids.add(alunaId);
+      }
+      todosAlunaIds.add(alunaId);
+    }
+
+    final nomesPorId =
+        await _buscarPrimeirosNomesPorIds(todosAlunaIds.toList());
+
+    final resultado = <String, List<String>>{};
+    for (final entry in alunaIdsPorSlot.entries) {
+      resultado[entry.key] =
+          entry.value.map((id) => nomesPorId[id]).whereType<String>().toList();
+    }
+
+    return resultado;
+  }
+
+  Future<Map<String, List<String>>> buscarNomesReposicoesPorPeriodo({
+    required Iterable<String> gradeHorarioIds,
+    required DateTime inicio,
+    required DateTime limite,
+  }) async {
+    final ids = gradeHorarioIds.toSet().toList();
+    if (ids.isEmpty) return {};
+
+    final docsPorId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+
+    for (var i = 0; i < ids.length; i += 10) {
+      final lote = ids.sublist(i, (i + 10).clamp(0, ids.length));
+      final reposicoes = await _buscarReposicoesAgendadas(lote, inicio, limite);
+      for (final doc in reposicoes) {
+        docsPorId[doc.id] = doc;
+      }
+    }
+
+    final alunaIdsPorReposicao = <String, List<String>>{};
+    final todosAlunaIds = <String>{};
+
+    for (final doc in docsPorId.values) {
+      final dados = doc.data();
+      final gradeHorarioId = dados['novoHorarioId'] as String?;
+      final alunaId = dados['alunaId'] as String?;
+      final dataHora = _parseDateNullable(dados['novaDataHora']);
+      if (gradeHorarioId == null || alunaId == null || dataHora == null)
+        continue;
+      if (dataHora.isBefore(inicio) || dataHora.isAfter(limite)) continue;
+
+      final chave = _chaveReposicao(gradeHorarioId, dataHora);
+      final idsNoSlot = alunaIdsPorReposicao.putIfAbsent(chave, () => []);
+      if (!idsNoSlot.contains(alunaId)) {
+        idsNoSlot.add(alunaId);
+      }
+      todosAlunaIds.add(alunaId);
+    }
+
+    final nomesPorId =
+        await _buscarPrimeirosNomesPorIds(todosAlunaIds.toList());
+
+    final resultado = <String, List<String>>{};
+    for (final entry in alunaIdsPorReposicao.entries) {
+      resultado[entry.key] =
+          entry.value.map((id) => nomesPorId[id]).whereType<String>().toList();
+    }
+
+    return resultado;
+  }
+
   /// Retorna os primeiros nomes das alunas matriculadas neste slot via horário fixo.
   Future<List<String>> buscarNomesFixosPorSlot(
     int diaSemana,
@@ -136,7 +249,92 @@ class GradeHorarioRepository {
     return _buscarPrimeirosNomes(alunaIds);
   }
 
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+      _buscarReposicoesAgendadas(
+    List<String> gradeHorarioIds,
+    DateTime inicio,
+    DateTime limite,
+  ) async {
+    final docsPorId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    var consultaPorPeriodoExecutada = false;
+
+    Future<void> tentarConsultaPorPeriodo(
+      dynamic inicioFiltro,
+      dynamic limiteFiltro,
+    ) async {
+      try {
+        final snapshot = await _firestore
+            .colecao('reposicoes')
+            .where('status', isEqualTo: 'agendada')
+            .where('novoHorarioId', whereIn: gradeHorarioIds)
+            .where('novaDataHora', isGreaterThanOrEqualTo: inicioFiltro)
+            .where('novaDataHora', isLessThanOrEqualTo: limiteFiltro)
+            .get();
+        consultaPorPeriodoExecutada = true;
+        for (final doc in snapshot.docs) {
+          docsPorId[doc.id] = doc;
+        }
+      } catch (e) {
+        debugPrint('GradeHorarioRepository._buscarReposicoesAgendadas: $e');
+      }
+    }
+
+    await tentarConsultaPorPeriodo(
+      inicio.toIso8601String(),
+      limite.toIso8601String(),
+    );
+    await tentarConsultaPorPeriodo(
+      Timestamp.fromDate(inicio),
+      Timestamp.fromDate(limite),
+    );
+
+    if (consultaPorPeriodoExecutada) {
+      return docsPorId.values.toList();
+    }
+
+    try {
+      final snapshot = await _firestore
+          .colecao('reposicoes')
+          .where('status', isEqualTo: 'agendada')
+          .where('novoHorarioId', whereIn: gradeHorarioIds)
+          .get();
+      for (final doc in snapshot.docs) {
+        docsPorId[doc.id] = doc;
+      }
+      return docsPorId.values.toList();
+    } catch (e) {
+      debugPrint(
+          'GradeHorarioRepository._buscarReposicoesAgendadas fallback: $e');
+    }
+
+    for (final gradeHorarioId in gradeHorarioIds) {
+      try {
+        final snapshot = await _firestore
+            .colecao('reposicoes')
+            .where('novoHorarioId', isEqualTo: gradeHorarioId)
+            .where('status', isEqualTo: 'agendada')
+            .get();
+        for (final doc in snapshot.docs) {
+          docsPorId[doc.id] = doc;
+        }
+      } catch (e) {
+        debugPrint(
+          'GradeHorarioRepository._buscarReposicoesAgendadas legado [$gradeHorarioId]: $e',
+        );
+      }
+    }
+
+    return docsPorId.values.toList();
+  }
+
   Future<List<String>> _buscarPrimeirosNomes(List<String> ids) async {
+    final nomesPorId = await _buscarPrimeirosNomesPorIds(ids);
+    return ids.map((id) => nomesPorId[id]).whereType<String>().toList();
+  }
+
+  Future<Map<String, String>> _buscarPrimeirosNomesPorIds(
+      List<String> ids) async {
+    final nomesPorId = <String, String>{};
     final nomes = <String>[];
     for (var i = 0; i < ids.length; i += 10) {
       final batch = ids.sublist(i, (i + 10).clamp(0, ids.length));
@@ -147,10 +345,18 @@ class GradeHorarioRepository {
       for (final doc in snap.docs) {
         final nome = doc.data()['nome'] as String? ?? '';
         if (nome.isNotEmpty) {
-          nomes.add(nome.trim().split(' ').first);
+          nomesPorId[doc.id] = nome.trim().split(' ').first;
         }
       }
     }
-    return nomes;
+
+    for (final id in ids) {
+      final nome = nomesPorId[id];
+      if (nome != null) {
+        nomes.add(nome);
+      }
+    }
+
+    return nomesPorId;
   }
 }
