@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/helpers.dart';
@@ -53,7 +54,15 @@ class AlunaDrawer extends StatelessWidget {
               // Cabeçalho com dados do perfil
               UserAccountsDrawerHeader(
                 decoration: const BoxDecoration(
-                  color: AppColors.primary,
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primaryDark,
+                      AppColors.primary,
+                      AppColors.accentCocoa,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                 ),
                 currentAccountPicture: CircleAvatar(
                   backgroundColor: AppColors.secondary,
@@ -103,26 +112,33 @@ class AlunaDrawer extends StatelessWidget {
                     ),
                     _DrawerItem(
                       icone: Icons.credit_card,
-                      rotulo: 'Meu Plano',
-                      cor: const Color(0xFF7B1FA2),
+                      rotulo: 'Planos',
+                      cor: AppColors.accentCocoa,
                       rota: Routes.meuPlano,
                     ),
                     _DrawerItem(
-                      icone: Icons.celebration_outlined,
-                      rotulo: 'Eventos',
-                      cor: const Color(0xFFE91E63),
-                      rota: Routes.eventos,
+                      icone: Icons.auto_graph_rounded,
+                      rotulo: 'Minha Jornada',
+                      cor: AppColors.accentSand,
+                      rota: Routes.minhaJornada,
                     ),
+                    if (AppConstants.muralEstudioHabilitado)
+                      _DrawerItem(
+                        icone: Icons.campaign_outlined,
+                        rotulo: 'Avisos',
+                        cor: AppColors.accentCaramel,
+                        rota: Routes.eventos,
+                      ),
                     _DrawerItem(
                       icone: Icons.person_outline,
                       rotulo: 'Meu Perfil',
-                      cor: const Color(0xFF00897B),
+                      cor: AppColors.secondaryDark,
                       rota: Routes.perfil,
                     ),
                     _DrawerItem(
                       icone: Icons.refresh,
                       rotulo: 'Reposições',
-                      cor: const Color(0xFF1565C0),
+                      cor: AppColors.primaryDark,
                       rota: Routes.minhasReposicoes,
                     ),
                   ],
@@ -183,6 +199,7 @@ class _DrawerItem extends StatelessWidget {
         style: const TextStyle(
           fontWeight: FontWeight.w500,
           fontSize: 15,
+          color: AppColors.textPrimary,
         ),
       ),
       onTap: () {

@@ -4,17 +4,20 @@ import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/assinatura.dart';
 import '../../models/plano.dart';
+import '../../models/usuario.dart';
 import '../../core/utils/date_formatter.dart';
 
 /// Card de status do plano/créditos da aluna.
 class PlanoStatusCard extends StatelessWidget {
   final Assinatura? assinatura;
   final Plano? plano;
+  final NivelAluna? nivelAluna;
 
   const PlanoStatusCard({
     super.key,
     required this.assinatura,
     required this.plano,
+    this.nivelAluna,
   });
 
   @override
@@ -136,7 +139,7 @@ class PlanoStatusCard extends StatelessWidget {
                         color: Colors.white, size: 24),
                     const SizedBox(width: 8),
                     Text(
-                      plano?.nome ?? 'Meu Plano',
+                      plano?.nome ?? 'Planos',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -144,7 +147,11 @@ class PlanoStatusCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                _buildStatusBadge(vencida, proximoVencimento),
+                _buildStatusBadge(
+                  vencida,
+                  proximoVencimento,
+                  nivelAluna,
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -223,34 +230,90 @@ class PlanoStatusCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusBadge(bool vencida, bool proximoVencimento) {
+  Widget _buildStatusBadge(
+    bool vencida,
+    bool proximoVencimento,
+    NivelAluna? nivelAluna,
+  ) {
     String texto;
-    Color cor;
-    if (vencida) {
+    IconData icone;
+    Color corTexto;
+    Color corFundo;
+    Color corBorda;
+    Color corGlow;
+
+    if (nivelAluna != null) {
+      texto = nivelAluna.label;
+      icone = Icons.workspace_premium_rounded;
+      corTexto = AppColors.accentSand;
+      corFundo = Colors.white.withValues(alpha: 0.1);
+      corBorda = AppColors.secondaryLight.withValues(alpha: 0.4);
+      corGlow = AppColors.secondaryLight.withValues(alpha: 0.18);
+    } else if (vencida) {
       texto = 'Vencido';
-      cor = Colors.red.shade200;
+      icone = Icons.error_outline_rounded;
+      corTexto = Colors.red.shade200;
+      corFundo = Colors.red.shade200.withValues(alpha: 0.18);
+      corBorda = Colors.red.shade200;
+      corGlow = Colors.red.shade200.withValues(alpha: 0.12);
     } else if (proximoVencimento) {
       texto = 'Vence em breve';
-      cor = Colors.orange.shade200;
+      icone = Icons.schedule_rounded;
+      corTexto = Colors.orange.shade200;
+      corFundo = Colors.orange.shade200.withValues(alpha: 0.18);
+      corBorda = Colors.orange.shade200;
+      corGlow = Colors.orange.shade200.withValues(alpha: 0.12);
     } else {
       texto = 'Ativo';
-      cor = Colors.green.shade200;
+      icone = Icons.check_circle_outline_rounded;
+      corTexto = AppColors.accentSand;
+      corFundo = Colors.white.withValues(alpha: 0.1);
+      corBorda = AppColors.secondaryLight.withValues(alpha: 0.4);
+      corGlow = AppColors.secondaryLight.withValues(alpha: 0.18);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cor),
+        color: corFundo,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: corBorda),
+        boxShadow: [
+          BoxShadow(
+            color: corGlow,
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Text(
-        texto,
-        style: TextStyle(
-          color: cor,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icone,
+              size: 11,
+              color: corTexto,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            texto,
+            style: TextStyle(
+              color: corTexto,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.45,
+              height: 1,
+            ),
+          ),
+        ],
       ),
     );
   }

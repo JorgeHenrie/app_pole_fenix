@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../models/plano.dart';
 
 /// Card de administração de plano.
@@ -29,7 +30,19 @@ class PlanoAdminCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: plano.ativo ? Colors.green[50] : Colors.grey[200],
+              gradient: LinearGradient(
+                colors: plano.ativo
+                    ? [
+                        AppColors.primaryLight.withValues(alpha: 0.34),
+                        AppColors.surface,
+                      ]
+                    : [
+                        AppColors.greyLight,
+                        Colors.white,
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(12)),
             ),
@@ -44,13 +57,14 @@ class PlanoAdminCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         plano.descricao,
-                        style: TextStyle(
-                          color: Colors.grey[700],
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
                           fontSize: 14,
                         ),
                       ),
@@ -66,7 +80,8 @@ class PlanoAdminCard extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
-                  backgroundColor: plano.ativo ? Colors.green : Colors.grey,
+                  backgroundColor:
+                      plano.ativo ? AppColors.success : AppColors.greyDark,
                 ),
               ],
             ),
@@ -140,8 +155,7 @@ class PlanoAdminCard extends StatelessWidget {
                   ),
                   label: Text(plano.ativo ? 'Desativar' : 'Ativar'),
                   style: TextButton.styleFrom(
-                    foregroundColor:
-                        plano.ativo ? Colors.orange : Colors.green,
+                    foregroundColor: plano.ativo ? Colors.orange : Colors.green,
                   ),
                 ),
               ),

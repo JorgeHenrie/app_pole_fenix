@@ -2,6 +2,20 @@ import 'package:flutter/foundation.dart';
 import '../models/reposicao.dart';
 import '../repositories/reposicao_repository.dart';
 
+class ResultadoCancelamentoReposicao {
+  final String? erro;
+  final bool manteveReposicao;
+  final String? mensagemSucesso;
+
+  const ResultadoCancelamentoReposicao({
+    this.erro,
+    this.manteveReposicao = false,
+    this.mensagemSucesso,
+  });
+
+  bool get sucesso => erro == null;
+}
+
 class ReposicaoProvider extends ChangeNotifier {
   final ReposicaoRepository _repository = ReposicaoRepository();
 
@@ -14,10 +28,9 @@ class ReposicaoProvider extends ChangeNotifier {
       _reposicoes.where((r) => r.status == 'pendente' && !r.expirou).toList();
   List<Reposicao> get agendadas =>
       _reposicoes.where((r) => r.status == 'agendada').toList();
-  List<Reposicao> get historico =>
-      _reposicoes
-          .where((r) => r.status == 'realizada' || r.status == 'expirada')
-          .toList();
+  List<Reposicao> get historico => _reposicoes
+      .where((r) => r.status == 'realizada' || r.status == 'expirada')
+      .toList();
   bool get carregando => _carregando;
   String? get erro => _erro;
   int get quantidadePendentes => pendentes.length;
@@ -60,6 +73,60 @@ class ReposicaoProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('ReposicaoProvider.agendarReposicao: $e');
       return false;
+    }
+  }
+
+  Future<ResultadoCancelamentoReposicao> cancelarReposicaoAgendada(
+    Reposicao reposicao,
+  ) async {
+    final dataHora = reposicao.novaDataHora;
+    if (dataHora == null) {
+      return const ResultadoCancelamentoReposicao(
+        erro: 'Essa reposição não possui horário agendado.',
+      );
+    }
+
+    final agora = DateTime.now();
+    if (dataHora.isBefore(agora)) {
+      return const ResultadoCancelamentoReposicao(
+        erro: 'Não é possível cancelar reposições passadas.',
+      );
+    }
+
+    final dentroDoPrazo = dataHora.difference(agora).inHours >= 2;
+
+    try {
+      if (dentroDoPrazo) {
+        await _repository.desagendar(reposicao.id);
+        _reposicoes = _reposicoes.map((item) {
+          if (item.id != reposicao.id) return item;
+          return item.copyWith(
+            status: 'pendente',
+            novaDataHora: null,
+            novoHorarioId: null,
+            agendadaEm: null,
+          );
+        }).toList();
+      } else {
+        await _repository.marcarExpirada(reposicao.id);
+        _reposicoes = _reposicoes.map((item) {
+          if (item.id != reposicao.id) return item;
+          return item.copyWith(status: 'expirada');
+        }).toList();
+      }
+
+      notifyListeners();
+      return ResultadoCancelamentoReposicao(
+        manteveReposicao: dentroDoPrazo,
+        mensagemSucesso: dentroDoPrazo
+            ? 'Reposição cancelada. Ela voltou a ficar disponível para reagendamento.'
+            : 'Reposição cancelada. Você perdeu esta reposição.',
+      );
+    } catch (e) {
+      debugPrint('ReposicaoProvider.cancelarReposicaoAgendada: $e');
+      return const ResultadoCancelamentoReposicao(
+        erro: 'Erro ao cancelar a reposição. Tente novamente.',
+      );
     }
   }
 

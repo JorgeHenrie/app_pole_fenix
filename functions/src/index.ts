@@ -206,6 +206,126 @@ function nomeDiaSemana(diaSemana: number): string {
   }
 }
 
+function mapearDiaSemanaJavaScriptParaApp(diaSemana: number): number {
+  return diaSemana === 0 ? 7 : diaSemana;
+}
+
+function partesDataHoraRR(data: Date): {
+  ano: number;
+  mes: number;
+  dia: number;
+  hora: number;
+  minuto: number;
+  segundo: number;
+} {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(data);
+
+  const lerParte = (tipo: string): number => {
+    const valor = partes.find((parte) => parte.type === tipo)?.value;
+    return Number.parseInt(valor ?? "0", 10);
+  };
+
+  return {
+    ano: lerParte("year"),
+    mes: lerParte("month"),
+    dia: lerParte("day"),
+    hora: lerParte("hour"),
+    minuto: lerParte("minute"),
+    segundo: lerParte("second"),
+  };
+}
+
+function criarDataVirtualRR(
+  ano: number,
+  mes: number,
+  dia: number,
+  hora = 0,
+  minuto = 0,
+  segundo = 0
+): Date {
+  return new Date(Date.UTC(ano, mes - 1, dia, hora, minuto, segundo, 0));
+}
+
+function obterAgoraRR(): Date {
+  const partes = partesDataHoraRR(new Date());
+  return criarDataVirtualRR(
+    partes.ano,
+    partes.mes,
+    partes.dia,
+    partes.hora,
+    partes.minuto,
+    partes.segundo
+  );
+}
+
+function formatarIsoLocalRR(data: Date): string {
+  const pad = (valor: number) => valor.toString().padStart(2, "0");
+
+  return `${data.getUTCFullYear()}-${pad(data.getUTCMonth() + 1)}-${pad(
+    data.getUTCDate()
+  )}T${pad(data.getUTCHours())}:${pad(data.getUTCMinutes())}:${pad(
+    data.getUTCSeconds()
+  )}.000`;
+}
+
+function calcularProximasOcorrenciasRR(
+  diaSemana: number,
+  horario: string,
+  semanas = 4
+): Date[] {
+  const horarioMatch = /^(\d{2}):(\d{2})$/.exec(horario);
+  if (!horarioMatch) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Horário inválido na grade: ${horario}.`
+    );
+  }
+
+  const hora = Number.parseInt(horarioMatch[1], 10);
+  const minuto = Number.parseInt(horarioMatch[2], 10);
+  const agora = obterAgoraRR();
+  let base = criarDataVirtualRR(
+    agora.getUTCFullYear(),
+    agora.getUTCMonth() + 1,
+    agora.getUTCDate(),
+    agora.getUTCHours(),
+    agora.getUTCMinutes(),
+    agora.getUTCSeconds()
+  );
+
+  while (mapearDiaSemanaJavaScriptParaApp(base.getUTCDay()) !== diaSemana) {
+    base.setUTCDate(base.getUTCDate() + 1);
+  }
+
+  let primeira = criarDataVirtualRR(
+    base.getUTCFullYear(),
+    base.getUTCMonth() + 1,
+    base.getUTCDate(),
+    hora,
+    minuto,
+    0
+  );
+
+  if (primeira.getTime() <= agora.getTime()) {
+    primeira.setUTCDate(primeira.getUTCDate() + 7);
+  }
+
+  return Array.from({ length: semanas }, (_, index) => {
+    const data = new Date(primeira.getTime());
+    data.setUTCDate(data.getUTCDate() + index * 7);
+    return data;
+  });
+}
+
 async function listarAdminsAtivos(): Promise<string[]> {
   const snapshot = await db
     .collection("usuarios")
@@ -465,6 +585,385 @@ export const sincronizarInativas = onCall(
     }
 
     return { corrigidas };
+  }
+);
+
+export const obterOcupacaoHorarios = onCall(
+  { region: REGION },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Login obrigatório.");
+    }
+
+    const payload = request.data as { gradeHorarioIds?: unknown };
+    const gradeHorarioIds = Array.isArray(payload?.gradeHorarioIds)
+      ? payload.gradeHorarioIds
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+      : [];
+
+    const gradeDocs =
+      gradeHorarioIds.length > 0
+        ? await Promise.all(
+            [...new Set(gradeHorarioIds)].map((id) =>
+              db.collection("grade_horarios").doc(id).get()
+            )
+          )
+        : (await db.collection("grade_horarios").where("ativo", "==", true).get())
+            .docs;
+
+    const gradesAtivas = gradeDocs
+      .filter((doc) => doc.exists && doc.data()?.ativo === true)
+      .map((doc) => ({
+        id: doc.id,
+        diaSemana: doc.data()?.diaSemana as number,
+        horario: doc.data()?.horario as string,
+      }));
+
+    const horariosAtivosSnap = await db
+      .collection("horarios_fixos")
+      .where("ativo", "==", true)
+      .get();
+
+    const ocupacaoPorSlot = new Map<string, number>();
+    for (const doc of horariosAtivosSnap.docs) {
+      const dados = doc.data();
+      const diaSemana = dados.diaSemana;
+      const horario = dados.horario;
+
+      if (typeof diaSemana !== "number" || typeof horario !== "string") {
+        continue;
+      }
+
+      const chave = `${diaSemana}|${horario}`;
+      ocupacaoPorSlot.set(chave, (ocupacaoPorSlot.get(chave) ?? 0) + 1);
+    }
+
+    const ocupacaoPorGradeHorarioId: Record<string, number> = {};
+    for (const grade of gradesAtivas) {
+      ocupacaoPorGradeHorarioId[grade.id] =
+        ocupacaoPorSlot.get(`${grade.diaSemana}|${grade.horario}`) ?? 0;
+    }
+
+    return { ocupacaoPorGradeHorarioId };
+  }
+);
+
+export const contratarPlano = onCall(
+  { region: REGION },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Login obrigatório.");
+    }
+
+    const payload = request.data as {
+      planoId?: unknown;
+      gradeHorarioIds?: unknown;
+    };
+
+    const planoId =
+      typeof payload?.planoId === "string" ? payload.planoId.trim() : "";
+    const gradeHorarioIds = Array.isArray(payload?.gradeHorarioIds)
+      ? payload.gradeHorarioIds
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+      : [];
+
+    if (!planoId) {
+      throw new HttpsError("invalid-argument", "planoId é obrigatório.");
+    }
+
+    const gradeIdsUnicos = [...new Set(gradeHorarioIds)];
+    if (gradeIdsUnicos.length === 0) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Selecione ao menos um horário para contratar o plano."
+      );
+    }
+
+    const alunaId = request.auth.uid;
+    const usuarioRef = db.collection("usuarios").doc(alunaId);
+    const assinaturaRef = db.collection("assinaturas").doc();
+    const agoraReal = new Date();
+    const agoraTimestamp = admin.firestore.Timestamp.fromDate(agoraReal);
+    const agoraRR = obterAgoraRR();
+    const agoraRRIso = formatarIsoLocalRR(agoraRR);
+    const horarioFixoIds: string[] = [];
+
+    await db.runTransaction(async (transaction) => {
+      const usuarioSnap = await transaction.get(usuarioRef);
+      if (!usuarioSnap.exists || !usuarioSnap.data()) {
+        throw new HttpsError("not-found", "Usuária não encontrada.");
+      }
+
+      const usuarioData = usuarioSnap.data()!;
+      if (usuarioData.tipoUsuario !== "aluna") {
+        throw new HttpsError(
+          "permission-denied",
+          "Somente alunas podem contratar planos por este fluxo."
+        );
+      }
+
+      if (usuarioData.ativo !== true) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Sua conta está inativa. Entre em contato com o estúdio."
+        );
+      }
+
+      if (usuarioData.statusCadastro && usuarioData.statusCadastro !== "aprovado") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Seu cadastro ainda não está aprovado para contratação."
+        );
+      }
+
+      const assinaturaAtivaSnap = await transaction.get(
+        db
+          .collection("assinaturas")
+          .where("alunaId", "==", alunaId)
+          .where("status", "==", "ativa")
+          .limit(1)
+      );
+
+      if (!assinaturaAtivaSnap.empty) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Você já possui um plano ativo."
+        );
+      }
+
+      const planoSnap = await transaction.get(db.collection("planos").doc(planoId));
+      if (!planoSnap.exists || !planoSnap.data()) {
+        throw new HttpsError("not-found", "Plano não encontrado.");
+      }
+
+      const planoData = planoSnap.data()!;
+      if (planoData.ativo !== true) {
+        throw new HttpsError(
+          "failed-precondition",
+          "O plano selecionado não está disponível no momento."
+        );
+      }
+
+      const aulasSemanais =
+        typeof planoData.aulasSemanais === "number" ? planoData.aulasSemanais : 1;
+      const aulasPorMes =
+        typeof planoData.aulasPorMes === "number"
+          ? planoData.aulasPorMes
+          : typeof planoData.quantidadeAulas === "number"
+            ? planoData.quantidadeAulas
+            : 0;
+      const duracaoDias =
+        typeof planoData.duracaoDias === "number" ? planoData.duracaoDias : 30;
+
+      if (gradeIdsUnicos.length !== aulasSemanais) {
+        throw new HttpsError(
+          "invalid-argument",
+          `Este plano exige ${aulasSemanais} horário(s) fixo(s).`
+        );
+      }
+
+      const gradeSnaps = await Promise.all(
+        gradeIdsUnicos.map((id) => transaction.get(db.collection("grade_horarios").doc(id)))
+      );
+
+      const gradesSelecionadas = gradeSnaps.map((snap) => {
+        if (!snap.exists || !snap.data()) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Um dos horários selecionados não existe mais."
+          );
+        }
+
+        const dados = snap.data()!;
+        if (dados.ativo !== true) {
+          throw new HttpsError(
+            "failed-precondition",
+            "Um dos horários selecionados não está mais disponível."
+          );
+        }
+
+        return {
+          id: snap.id,
+          diaSemana: dados.diaSemana as number,
+          horario: dados.horario as string,
+          modalidade: dados.modalidade as string,
+          capacidadeMaxima:
+            typeof dados.capacidadeMaxima === "number" ? dados.capacidadeMaxima : 3,
+        };
+      });
+
+      const slotsUnicos = new Set<string>();
+      for (const grade of gradesSelecionadas) {
+        const chave = `${grade.diaSemana}|${grade.horario}`;
+        if (slotsUnicos.has(chave)) {
+          throw new HttpsError(
+            "invalid-argument",
+            "Selecione horários diferentes para concluir a contratação."
+          );
+        }
+        slotsUnicos.add(chave);
+      }
+
+      const horariosAtivosSnap = await transaction.get(
+        db.collection("horarios_fixos").where("ativo", "==", true)
+      );
+      const ocupacaoPorSlot = new Map<string, number>();
+
+      for (const doc of horariosAtivosSnap.docs) {
+        const dados = doc.data();
+        const diaSemana = dados.diaSemana;
+        const horario = dados.horario;
+
+        if (typeof diaSemana !== "number" || typeof horario !== "string") {
+          continue;
+        }
+
+        const chave = `${diaSemana}|${horario}`;
+        ocupacaoPorSlot.set(chave, (ocupacaoPorSlot.get(chave) ?? 0) + 1);
+      }
+
+      for (const grade of gradesSelecionadas) {
+        const chave = `${grade.diaSemana}|${grade.horario}`;
+        const vagasOcupadas = ocupacaoPorSlot.get(chave) ?? 0;
+
+        if (vagasOcupadas >= grade.capacidadeMaxima) {
+          throw new HttpsError(
+            "failed-precondition",
+            `O horário de ${nomeDiaSemana(grade.diaSemana)} às ${grade.horario} lotou agora. Selecione outro.`
+          );
+        }
+
+        ocupacaoPorSlot.set(chave, vagasOcupadas + 1);
+      }
+
+      transaction.set(assinaturaRef, {
+        alunaId,
+        planoId,
+        status: "ativa",
+        creditosDisponiveis: aulasPorMes,
+        dataInicio: agoraTimestamp,
+        dataRenovacao: admin.firestore.Timestamp.fromDate(
+          new Date(agoraReal.getTime() + duracaoDias * UM_DIA_EM_MS)
+        ),
+        dataCancelamento: null,
+        horarioFixoIds: [],
+        aulasRealizadas: 0,
+        reposicoesDisponiveis: 0,
+      });
+
+      for (const grade of gradesSelecionadas) {
+        const horarioRef = db.collection("horarios_fixos").doc();
+        horarioFixoIds.push(horarioRef.id);
+
+        transaction.set(horarioRef, {
+          alunaId,
+          assinaturaId: assinaturaRef.id,
+          diaSemana: grade.diaSemana,
+          horario: grade.horario,
+          modalidade: grade.modalidade,
+          ativo: true,
+          criadoEm: agoraTimestamp,
+          desativadoEm: null,
+          motivoDesativacao: null,
+        });
+
+        const ocorrencias = calcularProximasOcorrenciasRR(
+          grade.diaSemana,
+          grade.horario,
+          4
+        );
+
+        for (const ocorrencia of ocorrencias) {
+          const aulaRef = db.collection("aulas").doc();
+          transaction.set(aulaRef, {
+            alunaId,
+            horarioFixoId: horarioRef.id,
+            dataHora: formatarIsoLocalRR(ocorrencia),
+            modalidade: grade.modalidade,
+            status: "agendada",
+            motivoCancelamento: null,
+            dataCancelamento: null,
+            dentroDosPrazo: true,
+            criadaEm: agoraRRIso,
+            titulo: null,
+            duracaoMinutos: null,
+            capacidadeMaxima: null,
+            vagasOcupadas: null,
+            instrutora: null,
+          });
+        }
+      }
+
+      transaction.update(assinaturaRef, {
+        horarioFixoIds,
+      });
+
+      transaction.set(
+        usuarioRef,
+        {
+          planoId,
+          atualizadoEm: agoraTimestamp,
+        },
+        { merge: true }
+      );
+    });
+
+    return {
+      assinaturaId: assinaturaRef.id,
+      horarioFixoIds,
+      quantidadeAulasGeradas: horarioFixoIds.length * 4,
+    };
+  }
+);
+
+export const sincronizarMinhasAulasPassadas = onCall(
+  { region: REGION },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Login obrigatório.");
+    }
+
+    const alunaId = request.auth.uid;
+    const agoraRR = formatarIsoLocalRR(obterAgoraRR());
+
+    const aulasSnap = await db
+      .collection("aulas")
+      .where("alunaId", "==", alunaId)
+      .where("status", "==", "agendada")
+      .where("dataHora", "<", agoraRR)
+      .get();
+
+    if (aulasSnap.empty) {
+      return { baixas: 0 };
+    }
+
+    const assinaturaSnap = await db
+      .collection("assinaturas")
+      .where("alunaId", "==", alunaId)
+      .where("status", "==", "ativa")
+      .limit(1)
+      .get();
+
+    const batch = db.batch();
+    for (const doc of aulasSnap.docs) {
+      batch.update(doc.ref, { status: "realizada" });
+    }
+
+    if (!assinaturaSnap.empty) {
+      batch.update(assinaturaSnap.docs[0].ref, {
+        creditosDisponiveis: admin.firestore.FieldValue.increment(
+          -aulasSnap.size
+        ),
+        aulasRealizadas: admin.firestore.FieldValue.increment(aulasSnap.size),
+      });
+    }
+
+    await batch.commit();
+    return { baixas: aulasSnap.size };
   }
 );
 
@@ -735,6 +1234,142 @@ export const notificarStatusCadastro = onDocumentUpdated(
         },
       });
     }
+  }
+);
+
+export const notificarSolicitacaoMigracaoPlanoPendente = onDocumentWritten(
+  {
+    document: "solicitacoes_migracao_plano/{solicitacaoId}",
+    region: REGION,
+  },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!depois) return;
+    if (depois.status !== "pendente") return;
+    if (antes?.status === "pendente") return;
+
+    const adminIds = await listarAdminsAtivos();
+    if (adminIds.length === 0) return;
+
+    const nomeAluna =
+      typeof depois.alunaNome === "string" && depois.alunaNome.trim().length > 0
+        ? depois.alunaNome
+        : "Uma aluna";
+    const planoAtual =
+      typeof depois.planoAtualNome === "string" &&
+      depois.planoAtualNome.trim().length > 0
+        ? depois.planoAtualNome
+        : "plano atual";
+    const planoDestino =
+      typeof depois.planoDestinoNome === "string" &&
+      depois.planoDestinoNome.trim().length > 0
+        ? depois.planoDestinoNome
+        : "novo plano";
+
+    await notificarUsuarios(adminIds, {
+      titulo: "Nova migração de plano pendente",
+      mensagem: `${nomeAluna} solicitou migração de ${planoAtual} para ${planoDestino}.`,
+      tipo: "migracao_plano_pendente",
+      referenciaId: event.params.solicitacaoId,
+      dados: {
+        tipo: "migracao_plano_pendente",
+        solicitacaoId: event.params.solicitacaoId,
+      },
+    });
+  }
+);
+
+export const notificarStatusMigracaoPlano = onDocumentUpdated(
+  {
+    document: "solicitacoes_migracao_plano/{solicitacaoId}",
+    region: REGION,
+  },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!antes || !depois) return;
+    if (antes.status === depois.status) return;
+    if (typeof depois.alunaId !== "string" || depois.alunaId.trim().length === 0) {
+      return;
+    }
+
+    const planoDestino =
+      typeof depois.planoDestinoNome === "string" &&
+      depois.planoDestinoNome.trim().length > 0
+        ? depois.planoDestinoNome
+        : "novo plano";
+
+    if (depois.status === "aprovada") {
+      await notificarUsuario(depois.alunaId, {
+        titulo: "Migração de plano aprovada",
+        mensagem: `Seu plano foi atualizado para ${planoDestino}. O acesso já segue as regras do novo plano.`,
+        tipo: "migracao_plano_status",
+        referenciaId: event.params.solicitacaoId,
+        dados: {
+          tipo: "migracao_plano_status",
+          status: "aprovada",
+          solicitacaoId: event.params.solicitacaoId,
+        },
+      });
+      return;
+    }
+
+    if (depois.status === "rejeitada") {
+      const respostaAdmin =
+        typeof depois.respostaAdmin === "string" &&
+        depois.respostaAdmin.trim().length > 0
+          ? ` Motivo: ${depois.respostaAdmin}`
+          : "";
+
+      await notificarUsuario(depois.alunaId, {
+        titulo: "Migração de plano não aprovada",
+        mensagem: `Sua solicitação para ${planoDestino} não foi aprovada.${respostaAdmin}`,
+        tipo: "migracao_plano_status",
+        referenciaId: event.params.solicitacaoId,
+        dados: {
+          tipo: "migracao_plano_status",
+          status: "rejeitada",
+          solicitacaoId: event.params.solicitacaoId,
+        },
+      });
+    }
+  }
+);
+
+export const notificarMovimentoConquistado = onDocumentWritten(
+  {
+    document: "jornada_movimentos/{registroId}",
+    region: REGION,
+  },
+  async (event) => {
+    const antes = event.data?.before.data();
+    const depois = event.data?.after.data();
+
+    if (!depois) return;
+    if (antes) return;
+    if (typeof depois.alunaId !== "string" || depois.alunaId.trim().length === 0) {
+      return;
+    }
+
+    const movimentoNome =
+      typeof depois.movimentoNome === "string" &&
+      depois.movimentoNome.trim().length > 0
+        ? depois.movimentoNome
+        : "novo movimento";
+
+    await notificarUsuario(depois.alunaId, {
+      titulo: "Que lindo!",
+      mensagem: `Você conquistou o movimento ${movimentoNome}. Que tal registrar isso com sua foto?`,
+      tipo: "movimento_conquistado",
+      referenciaId: event.params.registroId,
+      dados: {
+        tipo: "movimento_conquistado",
+        registroId: event.params.registroId,
+      },
+    });
   }
 );
 

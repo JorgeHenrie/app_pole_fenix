@@ -1,6 +1,7 @@
 class AppConstants {
   static const String appName = 'Fênix Pole Dance';
   static const String studioName = 'Fênix Pole Dance Studio';
+  static const bool muralEstudioHabilitado = false;
 
   // Políticas de cancelamento (em minutos)
   static const int cancelamentoAlunaMinutos = 120; // 2 horas

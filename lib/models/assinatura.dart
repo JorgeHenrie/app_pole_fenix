@@ -32,6 +32,16 @@ class Assinatura {
 
   bool get estaAtiva => status == 'ativa';
 
+  DateTime get fimDoCiclo => DateTime(
+        dataRenovacao.year,
+        dataRenovacao.month,
+        dataRenovacao.day,
+        23,
+        59,
+        59,
+        999,
+      );
+
   factory Assinatura.fromMap(Map<String, dynamic> mapa, String id) {
     DateTime _parseDate(dynamic raw) {
       if (raw is Timestamp) return raw.toDate();

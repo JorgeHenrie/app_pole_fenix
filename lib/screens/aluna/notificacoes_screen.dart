@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/date_formatter.dart';
+import '../../core/utils/notificacao_destino.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/notificacao.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notificacao_provider.dart';
 
@@ -90,9 +92,11 @@ class _NotificacoesList extends StatelessWidget {
               ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(16),
-                onTap: notificacao.lida
-                    ? null
-                    : () => notificacaoProvider.marcarComoLida(notificacao.id),
+                onTap: () => _abrirNotificacao(
+                  context,
+                  notificacaoProvider,
+                  notificacao,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
@@ -165,10 +169,33 @@ class _NotificacoesList extends StatelessWidget {
     );
   }
 
+  Future<void> _abrirNotificacao(
+    BuildContext context,
+    NotificacaoProvider notificacaoProvider,
+    Notificacao notificacao,
+  ) async {
+    if (!notificacao.lida) {
+      await notificacaoProvider.marcarComoLida(notificacao.id);
+    }
+
+    if (!context.mounted) return;
+
+    final rota = rotaPorTipoNotificacao(notificacao.tipo);
+    if (rota == null) return;
+
+    Navigator.of(context).pushNamed(rota);
+  }
+
   IconData _iconePorTipo(String tipo) {
     switch (tipo) {
       case 'cadastro_pendente':
         return Icons.person_add_alt_1_outlined;
+      case 'migracao_plano_pendente':
+        return Icons.swap_horiz_rounded;
+      case 'migracao_plano_status':
+        return Icons.credit_score_outlined;
+      case 'movimento_conquistado':
+        return Icons.workspace_premium_outlined;
       case 'cancelamento_tardio':
       case 'aula_cancelada':
       case 'lembrete_aula':
@@ -190,6 +217,12 @@ class _NotificacoesList extends StatelessWidget {
     switch (tipo) {
       case 'cadastro_pendente':
         return Colors.deepOrange.shade700;
+      case 'migracao_plano_pendente':
+        return AppColors.warning;
+      case 'migracao_plano_status':
+        return AppColors.success;
+      case 'movimento_conquistado':
+        return AppColors.accentCaramel;
       case 'cancelamento_tardio':
       case 'aula_cancelada':
         return AppColors.error;

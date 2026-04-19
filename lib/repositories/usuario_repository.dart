@@ -78,6 +78,22 @@ class UsuarioRepository {
     return snap.docs.map((d) => Usuario.fromMap(d.data(), d.id)).toList();
   }
 
+  Future<List<Usuario>> listarAlunasAtivasAprovadas() async {
+    final snap = await FirebaseFirestore.instance
+        .collection(_colecao)
+        .where('tipoUsuario', isEqualTo: 'aluna')
+        .where('ativo', isEqualTo: true)
+        .get();
+
+    final alunas = snap.docs
+        .map((doc) => Usuario.fromMap(doc.data(), doc.id))
+        .where((usuario) => usuario.statusCadastro == 'aprovado')
+        .toList()
+      ..sort((a, b) => a.nome.compareTo(b.nome));
+
+    return alunas;
+  }
+
   /// Aprova o cadastro de uma aluna, criando a assinatura e o horário fixo atomicamente.
   /// Retorna o ID do documento horario_fixo criado.
   Future<String> aprovarComPlano({

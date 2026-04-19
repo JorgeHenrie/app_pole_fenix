@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_constants.dart';
 import '../models/assinatura.dart';
 import '../models/aula.dart';
 import '../models/evento.dart';
@@ -8,12 +9,14 @@ import '../models/plano.dart';
 import '../repositories/assinatura_repository.dart';
 import '../repositories/aula_repository.dart';
 import '../repositories/evento_repository.dart';
+import '../services/firebase/app_functions_service.dart';
 
 /// Provider responsável pelos dados da tela inicial da aluna.
 class HomeAlunaProvider extends ChangeNotifier {
   final AssinaturaRepository _assinaturaRepository = AssinaturaRepository();
   final AulaRepository _aulaRepository = AulaRepository();
   final EventoRepository _eventoRepository = EventoRepository();
+  final AppFunctionsService _functionsService = AppFunctionsService();
 
   Assinatura? _assinatura;
   Plano? _plano;
@@ -30,33 +33,25 @@ class HomeAlunaProvider extends ChangeNotifier {
   String? get erro => _erro;
 
   /// Carrega todos os dados necessários para a tela inicial.
-  Future<void> carregarDados(String alunaId) async {
+  Future<void> carregarDados(
+    String alunaId, {
+    Future<void> Function(Assinatura? assinatura)? tarefaParalela,
+  }) async {
     _carregando = true;
     _erro = null;
     notifyListeners();
     try {
-      // 1. Carregar assinatura primeiro para ter o ID disponível.
       await _carregarAssinatura(alunaId);
 
-      // 2. Dar baixa automática em aulas cujo horário já passou.
-      //    Faz isso antes de carregar as próximas aulas para garantir
-      //    que os créditos já aparecem atualizados.
-      if (_assinatura != null && _assinatura!.estaAtiva) {
-        final baixas = await _aulaRepository.darBaixaAulasPassadas(
-          alunaId,
-          _assinatura!.id,
-        );
-        // Recarregar assinatura para refletir os créditos descontados.
-        if (baixas > 0) {
-          await _carregarAssinatura(alunaId);
-        }
+      final tarefas = <Future<void>>[
+        _carregarComplementos(alunaId),
+      ];
+
+      if (tarefaParalela != null) {
+        tarefas.add(tarefaParalela(_assinatura));
       }
 
-      // 3. Carregar demais dados em paralelo.
-      await Future.wait([
-        _carregarProximasAulas(alunaId),
-        _carregarEventos(),
-      ]);
+      await Future.wait(tarefas);
     } catch (e) {
       _erro = 'Erro ao carregar dados. Tente novamente.';
       debugPrint('HomeAlunaProvider.carregarDados erro: $e');
@@ -64,6 +59,34 @@ class HomeAlunaProvider extends ChangeNotifier {
       _carregando = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _carregarComplementos(String alunaId) async {
+    // Dar baixa automática em aulas cujo horário já passou.
+    // Faz isso antes de carregar as próximas aulas para manter créditos corretos.
+    if (_assinatura != null && _assinatura!.estaAtiva) {
+      try {
+        final baixas = await _functionsService.sincronizarMinhasAulasPassadas();
+
+        if (baixas > 0) {
+          await _carregarAssinatura(alunaId);
+        }
+      } catch (e) {
+        debugPrint('HomeAlunaProvider._sincronizarAulasPassadas erro: $e');
+      }
+    }
+
+    final tarefas = <Future<void>>[
+      _carregarProximasAulas(alunaId),
+    ];
+
+    if (AppConstants.muralEstudioHabilitado) {
+      tarefas.add(_carregarEventos());
+    } else {
+      _proximosEventos = [];
+    }
+
+    await Future.wait(tarefas);
   }
 
   Future<void> _carregarAssinatura(String alunaId) async {
@@ -97,10 +120,7 @@ class HomeAlunaProvider extends ChangeNotifier {
 
   Future<void> _carregarEventos() async {
     try {
-      final todos = await _eventoRepository.listarPublicados();
-      final agora = DateTime.now();
-      _proximosEventos =
-          todos.where((e) => e.dataHora.isAfter(agora)).take(3).toList();
+      _proximosEventos = await _eventoRepository.listarPublicados(limite: 5);
     } catch (e) {
       debugPrint('HomeAlunaProvider._carregarEventos erro: $e');
       _proximosEventos = [];

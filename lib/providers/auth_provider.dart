@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
+import '../core/navigation/app_navigator.dart';
+import '../core/utils/notificacao_destino.dart';
 import '../models/usuario.dart';
 import '../services/local/session_cache_service.dart';
 import '../services/firebase/auth_service.dart';
@@ -30,6 +33,7 @@ class AuthProvider extends ChangeNotifier {
   bool _cadastrando = false;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<String>? _tokenRefreshSubscription;
+  StreamSubscription<RemoteMessage>? _aberturaNotificacaoSubscription;
   String? _tokenNotificacaoAtual;
 
   EstadoAuth get estado => _estado;
@@ -131,13 +135,28 @@ class AuthProvider extends ChangeNotifier {
       if (credencial.user != null) {
         await _carregarDadosUsuario(
           credencial.user!.uid,
-          usarCacheComoFallback: true,
+          usarCacheComoFallback: false,
         );
+
+        if (_usuario == null) {
+          await _authService.logout();
+          await _sessionCacheService.limparUsuario();
+          _estado = EstadoAuth.naoAutenticado;
+          _erro =
+              'Esta conta existe no Authentication, mas nao possui cadastro no app. Peca ao administrador para regularizar o acesso.';
+          return;
+        }
       }
       _estado = EstadoAuth.autenticado;
     } on FirebaseAuthException catch (e) {
       _erro = _mensagemErroAuth(e.code);
       _estado = EstadoAuth.naoAutenticado;
+      _usuario = null;
+    } catch (e) {
+      debugPrint('Erro inesperado ao fazer login: $e');
+      _erro = 'Erro ao realizar operacao. Tente novamente.';
+      _estado = EstadoAuth.naoAutenticado;
+      _usuario = null;
     } finally {
       _setCarregando(false);
     }
@@ -151,11 +170,11 @@ class AuthProvider extends ChangeNotifier {
     String? telefone,
     String? planoId,
   }) async {
+    UserCredential? credencial;
     _cadastrando = true;
     _setCarregando(true);
     try {
-      final credencial =
-          await _authService.cadastrar(email: email, senha: senha);
+      credencial = await _authService.cadastrar(email: email, senha: senha);
       if (credencial.user != null) {
         final novoUsuario = Usuario(
           id: credencial.user!.uid,
@@ -170,7 +189,17 @@ class AuthProvider extends ChangeNotifier {
         );
         // Define _usuario antes de salvar para evitar race condition
         _usuario = novoUsuario;
-        await _usuarioRepository.criar(novoUsuario);
+        try {
+          await _usuarioRepository.criar(novoUsuario);
+        } catch (e) {
+          debugPrint('Erro ao criar perfil da usuaria no Firestore: $e');
+          await _rollbackCadastroIncompleto(credencial.user);
+          _usuario = null;
+          _estado = EstadoAuth.naoAutenticado;
+          _erro = 'Nao foi possivel concluir o cadastro. Tente novamente.';
+          return;
+        }
+
         await _sessionCacheService.salvarUsuario(novoUsuario);
         await _inicializarNotificacoes(credencial.user!.uid);
       }
@@ -179,10 +208,32 @@ class AuthProvider extends ChangeNotifier {
       _erro = _mensagemErroAuth(e.code);
       _estado = EstadoAuth.naoAutenticado;
       _usuario = null;
+    } catch (e) {
+      debugPrint('Erro inesperado ao cadastrar usuaria: $e');
+      await _rollbackCadastroIncompleto(credencial?.user);
+      _erro = 'Erro ao realizar operacao. Tente novamente.';
+      _estado = EstadoAuth.naoAutenticado;
+      _usuario = null;
     } finally {
       _cadastrando = false;
       _setCarregando(false);
     }
+  }
+
+  Future<void> _rollbackCadastroIncompleto(User? firebaseUser) async {
+    try {
+      await firebaseUser?.delete();
+    } catch (e) {
+      debugPrint('Erro ao remover usuario do Auth apos falha no cadastro: $e');
+    }
+
+    try {
+      await _authService.logout();
+    } catch (e) {
+      debugPrint('Erro ao encerrar sessao apos rollback de cadastro: $e');
+    }
+
+    await _sessionCacheService.limparUsuario();
   }
 
   /// Realiza logout.
@@ -254,9 +305,29 @@ class AuthProvider extends ChangeNotifier {
         if (novoToken.isEmpty) return;
         await _atualizarTokenNotificacao(uid, novoToken);
       });
+
+      await _aberturaNotificacaoSubscription?.cancel();
+      _aberturaNotificacaoSubscription = _messagingService
+          .escutarAberturaNotificacao(_abrirDestinoPorMensagemRemota);
+
+      final mensagemInicial = await _messagingService.obterMensagemInicial();
+      if (mensagemInicial != null) {
+        _abrirDestinoPorMensagemRemota(mensagemInicial);
+      }
     } catch (e) {
       debugPrint('Erro ao inicializar notificações push: $e');
     }
+  }
+
+  void _abrirDestinoPorMensagemRemota(RemoteMessage mensagem) {
+    final rota = rotaPorTipoNotificacao(mensagem.data['tipo'] as String?);
+    if (rota == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = appNavigatorKey.currentState;
+      if (navigator == null) return;
+      navigator.pushNamed(rota);
+    });
   }
 
   Future<void> _atualizarTokenNotificacao(String uid, String novoToken) async {
@@ -302,7 +373,11 @@ class AuthProvider extends ChangeNotifier {
         return 'Usuária não encontrada.';
       case 'wrong-password':
         return 'Senha incorreta.';
+      case 'user-disabled':
+        return 'Esta conta foi desativada. Peça ao administrador para liberar ou remover este cadastro.';
       case 'invalid-credential':
+        return 'E-mail ou senha incorretos.';
+      case 'invalid-login-credentials':
         return 'E-mail ou senha incorretos.';
       case 'email-already-in-use':
         return 'E-mail já cadastrado.';
@@ -323,6 +398,7 @@ class AuthProvider extends ChangeNotifier {
   void dispose() {
     _authStateSubscription?.cancel();
     _tokenRefreshSubscription?.cancel();
+    _aberturaNotificacaoSubscription?.cancel();
     super.dispose();
   }
 }

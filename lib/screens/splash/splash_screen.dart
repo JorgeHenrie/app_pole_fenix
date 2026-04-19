@@ -109,7 +109,11 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.self_improvement, size: 100, color: Colors.white),
+            const Icon(
+              Icons.local_fire_department_rounded,
+              size: 100,
+              color: Colors.white,
+            ),
             const SizedBox(height: 24),
             Text(
               'Fênix Pole Dance',

@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
+import '../../models/assinatura.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/despesa_studio.dart';
 import '../../models/plano.dart';
+import '../../models/solicitacao_migracao_plano.dart';
 import '../../models/usuario.dart';
+import '../../providers/auth_provider.dart';
 import '../../repositories/assinatura_repository.dart';
 import '../../repositories/despesa_studio_repository.dart';
 import '../../repositories/plano_repository.dart';
+import '../../repositories/solicitacao_migracao_plano_repository.dart';
 import '../../repositories/usuario_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 class PagamentosScreen extends StatefulWidget {
-  const PagamentosScreen({super.key});
+  final bool mostrarSomenteMigracoes;
+
+  const PagamentosScreen({
+    super.key,
+    this.mostrarSomenteMigracoes = false,
+  });
 
   @override
   State<PagamentosScreen> createState() => _PagamentosScreenState();
@@ -23,8 +33,10 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
   final PlanoRepository _planoRepo = PlanoRepository();
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
   final DespesaStudioRepository _despesaRepo = DespesaStudioRepository();
+  final SolicitacaoMigracaoPlanoRepository _migracaoPlanoRepo =
+      SolicitacaoMigracaoPlanoRepository();
 
-  final DateTime _mesAtual =
+  DateTime _mesSelecionado =
       DateTime(DateTime.now().year, DateTime.now().month);
 
   bool _carregando = false;
@@ -33,7 +45,9 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
   int _totalAlunasAtivas = 0;
   List<_ResumoPlano> _resumoPlanos = [];
   List<DespesaStudio> _despesas = [];
+  List<SolicitacaoMigracaoPlano> _migracoesPendentes = [];
   String? _despesaExcluindoId;
+  String? _solicitacaoProcessandoId;
 
   @override
   void initState() {
@@ -42,14 +56,30 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
   }
 
   Future<void> _carregarDados() async {
+    final mesCompetencia = _mesSelecionado;
     setState(() => _carregando = true);
 
     try {
-      final assinaturas = await _assinaturaRepo.listarAtivas();
-      final despesas = await _despesaRepo.listarDoMes(_mesAtual);
+      final migracoesPendentes = await _migracaoPlanoRepo.listarPendentes();
 
-      final planoIds = assinaturas.map((item) => item.planoId).toSet().toList();
-      final alunaIds = assinaturas.map((item) => item.alunaId).toSet().toList();
+      if (widget.mostrarSomenteMigracoes) {
+        if (!mounted) return;
+        setState(() {
+          _migracoesPendentes = migracoesPendentes;
+        });
+        return;
+      }
+
+      final assinaturas = await _assinaturaRepo.listarTodas();
+      final assinaturasDoMes = assinaturas
+          .where((item) => _assinaturaContaNaCompetencia(item, mesCompetencia))
+          .toList();
+      final despesas = await _despesaRepo.listarDoMes(mesCompetencia);
+
+      final planoIds =
+          assinaturasDoMes.map((item) => item.planoId).toSet().toList();
+      final alunaIds =
+          assinaturasDoMes.map((item) => item.alunaId).toSet().toList();
 
       final planos = await Future.wait(
         planoIds
@@ -70,15 +100,15 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
       final alunasAtivas = <String>{};
       double receita = 0;
 
-      for (final assinatura in assinaturas) {
+      for (final assinatura in assinaturasDoMes) {
         final plano = planosMap[assinatura.planoId];
         final aluna = alunasMap[assinatura.alunaId];
 
-        if (plano == null || aluna == null || !aluna.ativo) {
+        if (plano == null) {
           continue;
         }
 
-        alunasAtivas.add(aluna.id);
+        alunasAtivas.add(assinatura.alunaId);
         receita += plano.preco;
 
         final resumo = resumoPorPlano.putIfAbsent(
@@ -93,7 +123,12 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
         resumo.quantidadeAlunas += 1;
         resumo.faturamento += plano.preco;
         if (resumo.alunasPreview.length < 3) {
-          resumo.alunasPreview.add(aluna.nome);
+          final nomeAluna = aluna?.nome.trim();
+          resumo.alunasPreview.add(
+            nomeAluna == null || nomeAluna.isEmpty
+                ? 'Aluna indisponível'
+                : nomeAluna,
+          );
         }
       }
 
@@ -105,22 +140,29 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
         (total, item) => total + item.valor,
       );
 
-      if (!mounted) return;
+      if (!mounted || !_mesmoMes(mesCompetencia, _mesSelecionado)) return;
       setState(() {
         _receitaMensal = receita;
         _despesasMes = totalDespesas;
         _totalAlunasAtivas = alunasAtivas.length;
         _resumoPlanos = listaResumo;
         _despesas = despesas;
+        _migracoesPendentes = migracoesPendentes;
       });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar painel financeiro: $e')),
+          SnackBar(
+            content: Text(
+              widget.mostrarSomenteMigracoes
+                  ? 'Erro ao carregar migrações de plano: $e'
+                  : 'Erro ao carregar painel financeiro: $e',
+            ),
+          ),
         );
       }
     } finally {
-      if (mounted) {
+      if (mounted && _mesmoMes(mesCompetencia, _mesSelecionado)) {
         setState(() => _carregando = false);
       }
     }
@@ -129,7 +171,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
   Future<void> _abrirNovaDespesa() async {
     final despesa = await showDialog<DespesaStudio>(
       context: context,
-      builder: (_) => const _DespesaDialog(),
+      builder: (_) => _DespesaDialog(mesReferencia: _mesSelecionado),
     );
 
     if (despesa == null) return;
@@ -218,8 +260,110 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
     }
   }
 
+  Future<void> _responderMigracao(
+    SolicitacaoMigracaoPlano solicitacao,
+    String status,
+    String? respostaAdmin,
+  ) async {
+    final adminId = context.read<AuthProvider>().usuario?.id;
+    if (adminId == null) return;
+
+    setState(() => _solicitacaoProcessandoId = solicitacao.id);
+
+    try {
+      await _migracaoPlanoRepo.responder(
+        solicitacaoId: solicitacao.id,
+        status: status,
+        respostaAdmin: respostaAdmin,
+        adminId: adminId,
+      );
+
+      await _carregarDados();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            status == 'aprovada'
+                ? 'Migração para ${solicitacao.planoDestinoNome} aprovada.'
+                : 'Migração para ${solicitacao.planoDestinoNome} rejeitada.',
+          ),
+          backgroundColor:
+              status == 'aprovada' ? AppColors.success : AppColors.error,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao responder migração: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _solicitacaoProcessandoId = null);
+      }
+    }
+  }
+
   String _moeda(double valor) {
     return NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$').format(valor);
+  }
+
+  DateTime _inicioDoMes(DateTime data) => DateTime(data.year, data.month);
+
+  DateTime _fimDoMes(DateTime data) =>
+      DateTime(data.year, data.month + 1, 0, 23, 59, 59, 999);
+
+  bool _mesmoMes(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month;
+  }
+
+  bool _assinaturaContaNaCompetencia(
+    Assinatura assinatura,
+    DateTime competencia,
+  ) {
+    final inicioMes = _inicioDoMes(competencia);
+    final fimMes = _fimDoMes(competencia);
+    final fimAssinatura = assinatura.dataCancelamento ?? assinatura.fimDoCiclo;
+
+    return !assinatura.dataInicio.isAfter(fimMes) &&
+        !fimAssinatura.isBefore(inicioMes);
+  }
+
+  Future<void> _alterarMes(int delta) async {
+    final mesAtual = _inicioDoMes(DateTime.now());
+    final novoMes = _inicioDoMes(
+      DateTime(_mesSelecionado.year, _mesSelecionado.month + delta),
+    );
+
+    if (novoMes.isAfter(mesAtual) || _mesmoMes(novoMes, _mesSelecionado)) {
+      return;
+    }
+
+    setState(() => _mesSelecionado = novoMes);
+    await _carregarDados();
+  }
+
+  Future<void> _abrirSeletorMes() async {
+    final hoje = DateTime.now();
+    final selecionado = await showDatePicker(
+      context: context,
+      locale: const Locale('pt', 'BR'),
+      initialDate: _mesSelecionado,
+      firstDate: DateTime(2024, 1),
+      lastDate: _fimDoMes(hoje),
+      initialDatePickerMode: DatePickerMode.year,
+      helpText: 'Selecionar competência',
+      cancelText: 'Cancelar',
+      confirmText: 'Aplicar',
+    );
+
+    if (selecionado == null) return;
+
+    final novoMes = _inicioDoMes(selecionado);
+    if (_mesmoMes(novoMes, _mesSelecionado)) return;
+
+    setState(() => _mesSelecionado = novoMes);
+    await _carregarDados();
   }
 
   String _mesLabel(DateTime data) {
@@ -260,9 +404,73 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
     }
   }
 
+  Widget _buildSecaoMigracoesPendentes() {
+    return _SecaoCard(
+      titulo: 'Migrações de plano pendentes',
+      subtitulo: 'Confirme o Pix e aprove ou rejeite a troca de plano da aluna',
+      acao: _MetricPill(
+        label: '${_migracoesPendentes.length} pendente(s)',
+        color: _migracoesPendentes.isEmpty
+            ? AppColors.greyDark
+            : AppColors.warning,
+      ),
+      child: _migracoesPendentes.isEmpty
+          ? const _EstadoVazioSecao(
+              mensagem: 'Nenhuma migração de plano aguardando aprovação.',
+            )
+          : Column(
+              children: _migracoesPendentes
+                  .map(
+                    (solicitacao) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _SolicitacaoMigracaoPlanoTile(
+                        solicitacao: solicitacao,
+                        formatarMoeda: _moeda,
+                        processando:
+                            _solicitacaoProcessandoId == solicitacao.id,
+                        onResponder: (status, resposta) => _responderMigracao(
+                          solicitacao,
+                          status,
+                          resposta,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.mostrarSomenteMigracoes) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Migrações de Plano'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _carregarDados,
+            ),
+          ],
+        ),
+        body: _carregando
+            ? const LoadingIndicator()
+            : RefreshIndicator(
+                onRefresh: _carregarDados,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildSecaoMigracoesPendentes(),
+                  ],
+                ),
+              ),
+      );
+    }
+
     final lucro = _receitaMensal - _despesasMes;
+    final mesEhAtual = _mesmoMes(_mesSelecionado, DateTime.now());
     final ticketMedio =
         _totalAlunasAtivas == 0 ? 0.0 : _receitaMensal / _totalAlunasAtivas;
     final margemLucro = _receitaMensal <= 0 ? 0.0 : lucro / _receitaMensal;
@@ -292,8 +500,8 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _PainelHeader(
-                    titulo: 'Visão financeira do mês',
-                    subtitulo: _mesLabel(_mesAtual),
+                    titulo: 'Visão financeira da competência',
+                    subtitulo: _mesLabel(_mesSelecionado),
                     receita: _moeda(_receitaMensal),
                     despesas: _moeda(_despesasMes),
                     lucro: _moeda(lucro),
@@ -301,6 +509,14 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                         lucro >= 0 ? 'Operação saudável' : 'Atenção ao caixa',
                   ),
                   const SizedBox(height: 16),
+                  _FiltroCompetenciaCard(
+                    mesLabel: _mesLabel(_mesSelecionado),
+                    mesAtual: mesEhAtual,
+                    onMesAnterior: () => _alterarMes(-1),
+                    onMesProximo: mesEhAtual ? null : () => _alterarMes(1),
+                    onEscolherMes: _abrirSeletorMes,
+                  ),
+                  const SizedBox(height: 20),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final largura = constraints.maxWidth;
@@ -325,12 +541,12 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                           _ResumoCard(
                             titulo: 'Receita mensal estimada',
                             valor: _moeda(_receitaMensal),
-                            detalhe: 'Planos ativos das alunas',
+                            detalhe: 'Assinaturas ativas na competência',
                             cor: AppColors.success,
                             icone: Icons.trending_up,
                           ),
                           _ResumoCard(
-                            titulo: 'Despesas do mês',
+                            titulo: 'Despesas da competência',
                             valor: _moeda(_despesasMes),
                             detalhe: '${_despesas.length} lançamento(s)',
                             cor: AppColors.warning,
@@ -350,7 +566,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                                 : Icons.trending_down,
                           ),
                           _ResumoCard(
-                            titulo: 'Alunas ativas',
+                            titulo: 'Alunas na competência',
                             valor: '$_totalAlunasAtivas',
                             detalhe: 'Ticket médio ${_moeda(ticketMedio)}',
                             cor: AppColors.info,
@@ -371,7 +587,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                           _SecaoCard(
                             titulo: 'Quantidade de alunas por plano',
                             subtitulo:
-                                'Distribuição e faturamento por plano ativo',
+                                'Distribuição e faturamento estimado por plano na competência',
                             acao: _MetricPill(
                               label: '${_resumoPlanos.length} plano(s)',
                               color: AppColors.primary,
@@ -415,7 +631,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                           _SecaoCard(
                             titulo: 'Resumo executivo',
                             subtitulo:
-                                'Leitura rápida de performance e margem do mês',
+                                'Leitura rápida de performance e margem da competência selecionada',
                             child: Column(
                               children: [
                                 _InsightTile(
@@ -467,7 +683,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                           _SecaoCard(
                             titulo: 'Despesas operacionais',
                             subtitulo:
-                                'Aluguel, água, energia e demais custos do estúdio',
+                                'Aluguel, água, energia e demais custos do estúdio no período selecionado',
                             acao: TextButton.icon(
                               onPressed: _abrirNovaDespesa,
                               icon: const Icon(Icons.add, size: 18),
@@ -476,7 +692,7 @@ class _PagamentosScreenState extends State<PagamentosScreen> {
                             child: _despesas.isEmpty
                                 ? const _EstadoVazioSecao(
                                     mensagem:
-                                        'Nenhuma despesa lançada neste mês.',
+                                        'Nenhuma despesa lançada nesta competência.',
                                   )
                                 : Column(
                                     children: _despesas
@@ -546,6 +762,210 @@ class _ResumoPlano {
     required this.valorPlano,
     List<String>? alunasPreview,
   }) : alunasPreview = alunasPreview ?? [];
+}
+
+class _SolicitacaoMigracaoPlanoTile extends StatelessWidget {
+  final SolicitacaoMigracaoPlano solicitacao;
+  final String Function(double valor) formatarMoeda;
+  final bool processando;
+  final Future<void> Function(String status, String? resposta) onResponder;
+
+  const _SolicitacaoMigracaoPlanoTile({
+    required this.solicitacao,
+    required this.formatarMoeda,
+    required this.processando,
+    required this.onResponder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final solicitadoEm = DateFormat(
+      'dd/MM/yyyy HH:mm',
+      'pt_BR',
+    ).format(solicitacao.solicitadoEm);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppColors.primaryLight.withValues(alpha: 0.2),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.swap_horiz_rounded,
+                  color: AppColors.warning,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      solicitacao.alunaNome,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Solicitado em $solicitadoEm',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Pendente',
+                  style: TextStyle(
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '${solicitacao.planoAtualNome} -> ${solicitacao.planoDestinoNome}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Valor informado para pagamento: ${formatarMoeda(solicitacao.valorPlanoDestino)}',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Chave Pix usada pela aluna: ${solicitacao.chavePix}',
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: processando
+                      ? null
+                      : () => _abrirDialogoResposta(context, 'rejeitada'),
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text('Rejeitar'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: processando
+                      ? null
+                      : () => _abrirDialogoResposta(context, 'aprovada'),
+                  icon: processando
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_rounded),
+                  label: Text(processando ? 'Processando' : 'Aprovar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _abrirDialogoResposta(
+      BuildContext context, String status) async {
+    final controller = TextEditingController();
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          status == 'aprovada'
+              ? 'Aprovar migração de plano'
+              : 'Rejeitar migração de plano',
+        ),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: status == 'aprovada'
+                ? 'Comentário para a aluna (opcional)'
+                : 'Motivo da rejeição (opcional)',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      await onResponder(
+        status,
+        controller.text.trim().isEmpty ? null : controller.text.trim(),
+      );
+    }
+
+    controller.dispose();
+  }
 }
 
 class _PainelHeader extends StatelessWidget {
@@ -658,6 +1078,188 @@ class _PainelHeader extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FiltroCompetenciaCard extends StatelessWidget {
+  final String mesLabel;
+  final bool mesAtual;
+  final VoidCallback onMesAnterior;
+  final VoidCallback? onMesProximo;
+  final VoidCallback onEscolherMes;
+
+  const _FiltroCompetenciaCard({
+    required this.mesLabel,
+    required this.mesAtual,
+    required this.onMesAnterior,
+    required this.onMesProximo,
+    required this.onEscolherMes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: AppColors.primaryLight.withValues(alpha: 0.20),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _MesNavegacaoButton(
+                icon: Icons.chevron_left_rounded,
+                onPressed: onMesAnterior,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: onEscolherMes,
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color:
+                                AppColors.primaryLight.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.calendar_month_rounded,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Competência',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      mesLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (mesAtual) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                        border: Border.all(
+                                          color: AppColors.primaryLight
+                                              .withValues(alpha: 0.4),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Atual',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(
+                          Icons.unfold_more_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _MesNavegacaoButton(
+                icon: Icons.chevron_right_rounded,
+                onPressed: onMesProximo,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MesNavegacaoButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _MesNavegacaoButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: onPressed == null
+          ? AppColors.greyLight.withValues(alpha: 0.60)
+          : AppColors.background,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: Icon(
+            icon,
+            color: onPressed == null ? AppColors.grey : AppColors.primary,
+          ),
+        ),
       ),
     );
   }
@@ -1273,7 +1875,9 @@ class _EstadoVazioSecao extends StatelessWidget {
 }
 
 class _DespesaDialog extends StatefulWidget {
-  const _DespesaDialog();
+  final DateTime mesReferencia;
+
+  const _DespesaDialog({required this.mesReferencia});
 
   @override
   State<_DespesaDialog> createState() => _DespesaDialogState();
@@ -1284,6 +1888,17 @@ class _DespesaDialogState extends State<_DespesaDialog> {
   final TextEditingController _valorController = TextEditingController();
   String _categoria = 'aluguel';
   bool _salvando = false;
+  late DateTime _dataReferencia;
+
+  @override
+  void initState() {
+    super.initState();
+    final hoje = DateTime.now();
+    _dataReferencia = hoje.year == widget.mesReferencia.year &&
+            hoje.month == widget.mesReferencia.month
+        ? DateTime(hoje.year, hoje.month, hoje.day)
+        : DateTime(widget.mesReferencia.year, widget.mesReferencia.month, 1);
+  }
 
   @override
   void dispose() {
@@ -1295,6 +1910,27 @@ class _DespesaDialogState extends State<_DespesaDialog> {
   double? _parseValor(String texto) {
     final normalizado = texto.replaceAll('.', '').replaceAll(',', '.').trim();
     return double.tryParse(normalizado);
+  }
+
+  Future<void> _selecionarData() async {
+    final primeiroDia =
+        DateTime(widget.mesReferencia.year, widget.mesReferencia.month, 1);
+    final ultimoDia =
+        DateTime(widget.mesReferencia.year, widget.mesReferencia.month + 1, 0);
+
+    final data = await showDatePicker(
+      context: context,
+      locale: const Locale('pt', 'BR'),
+      initialDate: _dataReferencia,
+      firstDate: primeiroDia,
+      lastDate: ultimoDia,
+      helpText: 'Data da despesa',
+      cancelText: 'Cancelar',
+      confirmText: 'Confirmar',
+    );
+
+    if (data == null) return;
+    setState(() => _dataReferencia = data);
   }
 
   @override
@@ -1344,6 +1980,40 @@ class _DespesaDialogState extends State<_DespesaDialog> {
                 hintText: '1500,00',
               ),
             ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _salvando ? null : _selecionarData,
+              borderRadius: BorderRadius.circular(12),
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Data de referência',
+                  border: OutlineInputBorder(),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_today_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        DateFormat('dd/MM/yyyy').format(_dataReferencia),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const Icon(
+                      Icons.expand_more_rounded,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1374,7 +2044,7 @@ class _DespesaDialogState extends State<_DespesaDialog> {
                       categoria: _categoria,
                       descricao: _descricaoController.text.trim(),
                       valor: valor,
-                      dataReferencia: agora,
+                      dataReferencia: _dataReferencia,
                       criadoEm: agora,
                     ),
                   );

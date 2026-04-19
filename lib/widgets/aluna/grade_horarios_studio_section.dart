@@ -355,6 +355,8 @@ class _GradeHorariosStudioSectionState
     String alunaId,
   ) async {
     final dentroDoPrazo = slot.dataHora.difference(DateTime.now()).inHours >= 2;
+    final ehReposicaoAgendada =
+        gradeProvider.slotTemReposicaoAgendadaDaAluna(slot);
     final hora = DateFormat('HH:mm').format(slot.dataHora);
     final df = DateFormat("EEEE, dd 'de' MMMM", 'pt_BR');
 
@@ -394,8 +396,12 @@ class _GradeHorariosStudioSectionState
                   Expanded(
                     child: Text(
                       dentroDoPrazo
-                          ? 'Você poderá remarcar esta aula em outro horário disponível.'
-                          : 'Cancelamentos com menos de 2 horas não geram reposição.',
+                          ? (ehReposicaoAgendada
+                              ? 'Você poderá cancelar esta reposição e reagendá-la em outro horário disponível.'
+                              : 'Você poderá remarcar esta aula em outro horário disponível.')
+                          : (ehReposicaoAgendada
+                              ? 'Cancelamentos com menos de 2 horas farão você perder esta reposição.'
+                              : 'Cancelamentos com menos de 2 horas não geram reposição.'),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.warning,
@@ -440,8 +446,9 @@ class _GradeHorariosStudioSectionState
       SnackBar(
         content: Text(
           resultado.erro ??
+              resultado.mensagemSucesso ??
               (resultado.criouReposicao
-                  ? 'Aula cancelada! Uma reposição está disponível por 30 dias.'
+                  ? 'Aula cancelada! A reposição ficou disponível até o fim do ciclo do seu plano.'
                   : 'Aula cancelada. Você perdeu o crédito desta aula.'),
         ),
         backgroundColor: resultado.erro != null

@@ -5,7 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../models/grade_horario.dart';
 import '../../models/plano.dart';
 import '../../repositories/grade_horario_repository.dart';
-import '../../repositories/horario_fixo_repository.dart';
+import '../../services/firebase/app_functions_service.dart';
 import '../../widgets/aluna/horario_selecao_card.dart';
 import '../../widgets/common/custom_button.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -32,10 +32,9 @@ class SelecionarHorariosScreen extends StatefulWidget {
       _SelecionarHorariosScreenState();
 }
 
-class _SelecionarHorariosScreenState
-    extends State<SelecionarHorariosScreen> {
+class _SelecionarHorariosScreenState extends State<SelecionarHorariosScreen> {
   final GradeHorarioRepository _gradeRepo = GradeHorarioRepository();
-  final HorarioFixoRepository _horarioFixoRepo = HorarioFixoRepository();
+  final AppFunctionsService _functionsService = AppFunctionsService();
 
   List<_GradeComOcupacao> _grade = [];
   final Set<String> _selecionados = {};
@@ -61,26 +60,37 @@ class _SelecionarHorariosScreenState
     setState(() => _carregando = true);
     try {
       final ativos = await _gradeRepo.listarAtivos();
-      final List<_GradeComOcupacao> lista = [];
-      for (final g in ativos) {
-        final ocupacao = await _horarioFixoRepo.contarOcupacao(
-          g.diaSemana,
-          g.horario,
-        );
-        lista.add(_GradeComOcupacao(grade: g, vagasOcupadas: ocupacao));
-      }
+      final ocupacaoPorGradeId = await _functionsService.obterOcupacaoHorarios(
+        ativos.map((item) => item.id).toList(),
+      );
+      final lista = ativos
+          .map(
+            (g) => _GradeComOcupacao(
+              grade: g,
+              vagasOcupadas: ocupacaoPorGradeId[g.id] ?? 0,
+            ),
+          )
+          .toList();
       if (mounted) {
         setState(() => _grade = lista);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao carregar horários')),
+          SnackBar(
+              content: Text('Erro ao carregar horários: ${_mensagemErro(e)}')),
         );
       }
     } finally {
       if (mounted) setState(() => _carregando = false);
     }
+  }
+
+  String _mensagemErro(Object erro) {
+    final texto = erro.toString();
+    return texto.startsWith('Bad state: ')
+        ? texto.substring('Bad state: '.length)
+        : texto;
   }
 
   void _toggleSelecao(_GradeComOcupacao item) {
@@ -123,11 +133,8 @@ class _SelecionarHorariosScreenState
 
   @override
   Widget build(BuildContext context) {
-    final diasComHorarios = _grade
-        .map((item) => item.grade.diaSemana)
-        .toSet()
-        .toList()
-      ..sort();
+    final diasComHorarios =
+        _grade.map((item) => item.grade.diaSemana).toSet().toList()..sort();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -154,8 +161,8 @@ class _SelecionarHorariosScreenState
                         const SizedBox(height: 4),
                         Text(
                           'Selecione ${widget.plano.aulasSemanais} horário(s) fixo(s)',
-                          style: const TextStyle(
-                              color: AppColors.textSecondary),
+                          style:
+                              const TextStyle(color: AppColors.textSecondary),
                         ),
                         const SizedBox(height: 4),
                         Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -24,26 +25,27 @@ class AcoesRapidasGrid extends StatelessWidget {
       ),
       _AcaoRapida(
         icone: Icons.credit_card,
-        rotulo: 'Meu Plano',
-        cor: const Color(0xFF7B1FA2),
+        rotulo: 'Planos',
+        cor: AppColors.accentCocoa,
         rota: Routes.meuPlano,
       ),
-      _AcaoRapida(
-        icone: Icons.celebration_outlined,
-        rotulo: 'Eventos',
-        cor: const Color(0xFFE91E63),
-        rota: Routes.eventos,
-      ),
+      if (AppConstants.muralEstudioHabilitado)
+        _AcaoRapida(
+          icone: Icons.campaign_outlined,
+          rotulo: 'Avisos',
+          cor: AppColors.accentCaramel,
+          rota: Routes.eventos,
+        ),
       _AcaoRapida(
         icone: Icons.person_outline,
         rotulo: 'Perfil',
-        cor: const Color(0xFF00897B),
+        cor: AppColors.secondaryDark,
         rota: Routes.perfil,
       ),
       _AcaoRapida(
         icone: Icons.refresh,
         rotulo: 'Reposições',
-        cor: const Color(0xFF1565C0),
+        cor: AppColors.primaryDark,
         rota: Routes.minhasReposicoes,
       ),
     ];
@@ -57,6 +59,7 @@ class AcoesRapidasGrid extends StatelessWidget {
             'Ações Rápidas',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
                 ),
           ),
           const SizedBox(height: 12),

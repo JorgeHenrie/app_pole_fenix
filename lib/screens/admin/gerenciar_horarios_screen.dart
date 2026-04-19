@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/helpers.dart';
 import '../../models/grade_horario.dart';
@@ -178,7 +180,10 @@ class _GerenciarHorariosScreenState extends State<GerenciarHorariosScreen> {
       ),
       builder: (ctx) => _AlunasSlotSheet(
         titulo: '$diasNome • ${grade.horario}',
-        subtitulo: grade.modalidade,
+        subtitulo:
+            grade.instrutora != null && grade.instrutora!.trim().isNotEmpty
+                ? '${grade.modalidade} • ${grade.instrutora}'
+                : grade.modalidade,
         diaSemana: grade.diaSemana,
         horario: grade.horario,
       ),
@@ -335,7 +340,12 @@ class _HorarioSlotCard extends StatelessWidget {
         ),
         subtitle: Text(
           grade.ativo
-              ? '$vagas/${grade.capacidadeMaxima} vagas ocupadas ($disponivel disponível)'
+              ? [
+                  if (grade.instrutora != null &&
+                      grade.instrutora!.trim().isNotEmpty)
+                    'Instrutora: ${grade.instrutora}',
+                  '$vagas/${grade.capacidadeMaxima} vagas ocupadas ($disponivel disponível)',
+                ].join('\n')
               : 'Desativado',
         ),
         trailing: Row(
@@ -629,6 +639,7 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
   bool _processando = false;
   final TextEditingController _horarioController = TextEditingController();
   final TextEditingController _modalidadeController = TextEditingController();
+  final TextEditingController _instrutoraController = TextEditingController();
 
   final _diasSemana = const {
     1: 'Segunda-feira',
@@ -640,6 +651,26 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
     7: 'Domingo',
   };
 
+  String? _normalizarHorario(String valor) {
+    final digitos = valor.replaceAll(RegExp(r'\D'), '');
+    if (digitos.length != 4) return null;
+
+    final hora = int.tryParse(digitos.substring(0, 2));
+    final minuto = int.tryParse(digitos.substring(2, 4));
+    if (hora == null || minuto == null) return null;
+    if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) return null;
+
+    final horaFormatada = hora.toString().padLeft(2, '0');
+    final minutoFormatado = minuto.toString().padLeft(2, '0');
+    return '$horaFormatada:$minutoFormatado';
+  }
+
+  void _mostrarErro(String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensagem)),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -649,6 +680,7 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
       _capacidade = g.capacidadeMaxima;
       _horarioController.text = g.horario;
       _modalidadeController.text = g.modalidade;
+      _instrutoraController.text = g.instrutora ?? '';
     } else {
       _capacidade = 3;
     }
@@ -658,6 +690,7 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
   void dispose() {
     _horarioController.dispose();
     _modalidadeController.dispose();
+    _instrutoraController.dispose();
     super.dispose();
   }
 
@@ -671,7 +704,7 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<int>(
-              value: _diaSemana,
+              initialValue: _diaSemana,
               decoration: const InputDecoration(
                 labelText: 'Dia da Semana',
                 border: OutlineInputBorder(),
@@ -692,7 +725,8 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
                 border: OutlineInputBorder(),
                 hintText: '19:00',
               ),
-              keyboardType: TextInputType.datetime,
+              keyboardType: TextInputType.number,
+              inputFormatters: const [_HorarioInputFormatter()],
             ),
             const SizedBox(height: 12),
             TextField(
@@ -700,6 +734,15 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
               decoration: const InputDecoration(
                 labelText: 'Modalidade',
                 border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _instrutoraController,
+              decoration: const InputDecoration(
+                labelText: 'Instrutora (opcional)',
+                border: OutlineInputBorder(),
+                hintText: 'Ex.: Barbara',
               ),
             ),
             const SizedBox(height: 12),
@@ -737,17 +780,28 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
           onPressed: _processando
               ? null
               : () async {
-                  if (_horarioController.text.isEmpty ||
-                      _modalidadeController.text.isEmpty) {
+                  final horarioNormalizado =
+                      _normalizarHorario(_horarioController.text);
+                  if (horarioNormalizado == null) {
+                    _mostrarErro('Informe um horário válido no formato HH:mm.');
                     return;
                   }
+
+                  if (_modalidadeController.text.trim().isEmpty) {
+                    _mostrarErro('Informe a modalidade.');
+                    return;
+                  }
+
                   setState(() => _processando = true);
                   final grade = GradeHorario(
                     id: widget.gradeExistente?.id ?? '',
                     diaSemana: _diaSemana,
-                    horario: _horarioController.text.trim(),
+                    horario: horarioNormalizado,
                     capacidadeMaxima: _capacidade,
                     modalidade: _modalidadeController.text.trim(),
+                    instrutora: _instrutoraController.text.trim().isEmpty
+                        ? null
+                        : _instrutoraController.text.trim(),
                     ativo: widget.gradeExistente?.ativo ?? true,
                     criadoEm: widget.gradeExistente?.criadoEm ?? DateTime.now(),
                   );
@@ -763,6 +817,31 @@ class _GradeHorarioDialogState extends State<_GradeHorarioDialog> {
               : const Text('Salvar'),
         ),
       ],
+    );
+  }
+}
+
+class _HorarioInputFormatter extends TextInputFormatter {
+  const _HorarioInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitos = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final limitados = digitos.length > 4 ? digitos.substring(0, 4) : digitos;
+
+    String textoFormatado;
+    if (limitados.length <= 2) {
+      textoFormatado = limitados;
+    } else {
+      textoFormatado = '${limitados.substring(0, 2)}:${limitados.substring(2)}';
+    }
+
+    return TextEditingValue(
+      text: textoFormatado,
+      selection: TextSelection.collapsed(offset: textoFormatado.length),
     );
   }
 }

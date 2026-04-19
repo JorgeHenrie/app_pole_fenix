@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
+import '../../repositories/solicitacao_migracao_plano_repository.dart';
 import '../../repositories/usuario_repository.dart';
 import '../../widgets/common/notificacao_action_button.dart';
 
@@ -17,7 +18,10 @@ class HomeAdminScreen extends StatefulWidget {
 
 class _HomeAdminScreenState extends State<HomeAdminScreen> {
   final UsuarioRepository _usuarioRepo = UsuarioRepository();
+  final SolicitacaoMigracaoPlanoRepository _migracaoPlanoRepo =
+      SolicitacaoMigracaoPlanoRepository();
   int _pendentesCount = 0;
+  int _migracoesPendentesCount = 0;
   bool _falhaAoCarregarPendentes = false;
 
   @override
@@ -28,10 +32,18 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
 
   Future<void> _carregarPendentes() async {
     try {
-      final pendentes = await _usuarioRepo.buscarPendentes();
+      final resultados = await Future.wait([
+        _usuarioRepo.buscarPendentes(),
+        _migracaoPlanoRepo.contarPendentes(),
+      ]);
+
+      final pendentes = resultados[0] as List<dynamic>;
+      final migracoesPendentes = resultados[1] as int;
+
       if (mounted) {
         setState(() {
           _pendentesCount = pendentes.length;
+          _migracoesPendentesCount = migracoesPendentes;
           _falhaAoCarregarPendentes = false;
         });
       }
@@ -74,6 +86,14 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
           _buildSectionTitle(context, 'Horários e Agendamentos'),
           _buildMenuCard(
             context,
+            icon: Icons.view_timeline_rounded,
+            title: 'Agenda do Dia',
+            subtitle: 'Visualizar aulas diárias e alunas confirmadas',
+            color: AppColors.primaryDark,
+            rota: Routes.agendaAdmin,
+          ),
+          _buildMenuCard(
+            context,
             icon: Icons.schedule,
             title: 'Gerenciar Grade de Horários',
             subtitle: 'Criar e editar horários do estúdio',
@@ -85,7 +105,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             icon: Icons.person_add_alt_1,
             title: 'Aprovar Cadastros',
             subtitle: 'Aprovar ou rejeitar novas alunas',
-            color: const Color(0xFFE65100),
+            color: AppColors.accentCaramel,
             rota: Routes.aprovarCadastros,
             badge: _pendentesCount,
             mostrarAviso: _falhaAoCarregarPendentes,
@@ -103,7 +123,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             icon: Icons.bar_chart,
             title: 'Ocupação de Horários',
             subtitle: 'Ver alunas inscritas em cada horário',
-            color: const Color(0xFF00695C),
+            color: AppColors.secondaryDark,
             rota: Routes.visualizarOcupacao,
           ),
           _buildMenuCard(
@@ -111,34 +131,52 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             icon: Icons.credit_card,
             title: 'Gerenciar Planos',
             subtitle: 'Criar e editar planos de assinatura',
-            color: const Color(0xFF2E7D32),
+            color: AppColors.accentCocoa,
             rota: Routes.gerenciarPlanos,
+          ),
+          _buildMenuCard(
+            context,
+            icon: Icons.auto_graph_rounded,
+            title: 'Jornada das Alunas',
+            subtitle: 'Cadastrar movimentos e liberar conquistas',
+            color: AppColors.accentSand,
+            rota: Routes.gerenciarJornada,
+          ),
+          _buildMenuCard(
+            context,
+            icon: Icons.campaign_outlined,
+            title: 'Timeline de Avisos',
+            subtitle: 'Cadastrar artes, comunicados e eventos para as alunas',
+            color: AppColors.accentCaramel,
+            rota: Routes.gerenciarAvisos,
           ),
           const SizedBox(height: 8),
           _buildSectionTitle(context, 'Gestão'),
           _buildMenuCard(
             context,
-            icon: Icons.swap_horiz,
-            title: 'Solicitacoes de Mudanca',
-            subtitle: 'Responder pedidos de troca de horario',
-            color: const Color(0xFF6A1B9A),
-            rota: Routes.aprovarSolicitacoes,
-          ),
-          _buildMenuCard(
-            context,
             icon: Icons.medical_information_outlined,
             title: 'Validar Atestados',
             subtitle: 'Aprovar ou rejeitar faltas com atestado',
-            color: const Color(0xFF00838F),
+            color: AppColors.accentSand,
             rota: Routes.validarAtestados,
+          ),
+          _buildMenuCard(
+            context,
+            icon: Icons.swap_horizontal_circle_outlined,
+            title: 'Migrações de Plano',
+            subtitle: 'Aprovar ou rejeitar pedidos de troca de plano',
+            color: AppColors.primaryDark,
+            rota: Routes.migracoesPlano,
+            badge: _migracoesPendentesCount,
           ),
           _buildMenuCard(
             context,
             icon: Icons.payment,
             title: 'Pagamentos',
-            subtitle: 'Controle de pagamentos e assinaturas',
-            color: const Color(0xFF1565C0),
+            subtitle: 'Controle financeiro e migrações de plano',
+            color: AppColors.secondary,
             rota: Routes.pagamentos,
+            badge: _migracoesPendentesCount,
           ),
         ],
       ),
@@ -165,6 +203,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
     required String subtitle,
     required Color color,
     required String rota,
+    int badge = 0,
   }) {
     return _buildMenuCardComBadge(
       context,
@@ -173,7 +212,7 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       subtitle: subtitle,
       color: color,
       rota: rota,
-      badge: 0,
+      badge: badge,
     );
   }
 
@@ -193,7 +232,9 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       child: ListTile(
         onTap: () async {
           await Navigator.pushNamed(context, rota);
-          if (rota == Routes.aprovarCadastros) {
+          if (rota == Routes.aprovarCadastros ||
+              rota == Routes.pagamentos ||
+              rota == Routes.migracoesPlano) {
             _carregarPendentes();
           }
         },
