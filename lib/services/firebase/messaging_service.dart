@@ -43,6 +43,21 @@ class MessagingService {
     return _messaging.onTokenRefresh.listen(handler);
   }
 
+  StreamSubscription<RemoteMessage> escutarAberturaNotificacao(
+    void Function(RemoteMessage mensagem) handler,
+  ) {
+    if (!suportaPush) {
+      return const Stream<RemoteMessage>.empty().listen(handler);
+    }
+
+    return FirebaseMessaging.onMessageOpenedApp.listen(handler);
+  }
+
+  Future<RemoteMessage?> obterMensagemInicial() async {
+    if (!suportaPush) return null;
+    return _messaging.getInitialMessage();
+  }
+
   /// Configura handler para mensagens recebidas em primeiro plano.
   void configurarMensagemEmPrimeiroPlano(
     void Function(RemoteMessage mensagem) handler,

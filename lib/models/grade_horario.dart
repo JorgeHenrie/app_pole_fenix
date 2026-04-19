@@ -6,6 +6,7 @@ class GradeHorario {
   final String horario;
   final int capacidadeMaxima;
   final String modalidade;
+  final String? instrutora;
   final bool ativo;
   final DateTime criadoEm;
 
@@ -15,6 +16,7 @@ class GradeHorario {
     required this.horario,
     this.capacidadeMaxima = 3,
     required this.modalidade,
+    this.instrutora,
     required this.ativo,
     required this.criadoEm,
   });
@@ -48,6 +50,7 @@ class GradeHorario {
       horario: mapa['horario'] as String,
       capacidadeMaxima: mapa['capacidadeMaxima'] as int? ?? 3,
       modalidade: mapa['modalidade'] as String,
+      instrutora: mapa['instrutora'] as String?,
       ativo: mapa['ativo'] as bool,
       criadoEm: criadoEm,
     );
@@ -71,6 +74,7 @@ class GradeHorario {
       horario: mapa['horario'] as String,
       capacidadeMaxima: mapa['capacidadeMaxima'] as int? ?? 3,
       modalidade: mapa['modalidade'] as String,
+      instrutora: mapa['instrutora'] as String?,
       ativo: mapa['ativo'] as bool,
       criadoEm: criadoEm,
     );
@@ -82,6 +86,7 @@ class GradeHorario {
       'horario': horario,
       'capacidadeMaxima': capacidadeMaxima,
       'modalidade': modalidade,
+      'instrutora': instrutora,
       'ativo': ativo,
       'criadoEm': Timestamp.fromDate(criadoEm),
     };
@@ -93,6 +98,7 @@ class GradeHorario {
     String? horario,
     int? capacidadeMaxima,
     String? modalidade,
+    String? instrutora,
     bool? ativo,
     DateTime? criadoEm,
   }) {
@@ -102,6 +108,7 @@ class GradeHorario {
       horario: horario ?? this.horario,
       capacidadeMaxima: capacidadeMaxima ?? this.capacidadeMaxima,
       modalidade: modalidade ?? this.modalidade,
+      instrutora: instrutora ?? this.instrutora,
       ativo: ativo ?? this.ativo,
       criadoEm: criadoEm ?? this.criadoEm,
     );

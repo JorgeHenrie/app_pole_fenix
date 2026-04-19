@@ -1,0 +1,252 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnUid(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdminByDocument() {
+      return signedIn() &&
+          exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.tipoUsuario == 'admin';
+    }
+
+    function isAdmin() {
+      return signedIn() &&
+          (request.auth.token.admin == true || isAdminByDocument());
+    }
+
+    function onlyChanges(allowedKeys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
+    }
+
+    function activePlanExists(planId) {
+      return planId != null &&
+          exists(/databases/$(database)/documents/planos/$(planId)) &&
+          get(/databases/$(database)/documents/planos/$(planId)).data.ativo == true;
+    }
+
+    function ownsAssinaturaId(assinaturaId) {
+      return assinaturaId != null &&
+          exists(/databases/$(database)/documents/assinaturas/$(assinaturaId)) &&
+          get(/databases/$(database)/documents/assinaturas/$(assinaturaId)).data.alunaId == request.auth.uid;
+    }
+
+    function ownsHorarioFixoId(horarioFixoId) {
+      return horarioFixoId != null &&
+          exists(/databases/$(database)/documents/horarios_fixos/$(horarioFixoId)) &&
+          get(/databases/$(database)/documents/horarios_fixos/$(horarioFixoId)).data.alunaId == request.auth.uid;
+    }
+
+    match /usuarios/{userId} {
+      allow get: if isOwnUid(userId) || isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isAdmin() || (
+        isOwnUid(userId) &&
+        request.resource.data.tipoUsuario == 'aluna' &&
+        request.resource.data.statusCadastro == 'pendente' &&
+        request.resource.data.ativo == true
+      );
+
+      allow update: if isAdmin() || (
+        isOwnUid(userId) &&
+        onlyChanges([
+          'nome',
+          'email',
+          'telefone',
+          'fotoUrl',
+          'atualizadoEm',
+          'fcmTokens'
+        ])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /planos/{planoId} {
+      allow get: if isAdmin() || signedIn();
+      allow list: if isAdmin() || resource.data.ativo == true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /eventos/{eventoId} {
+      allow get, list: if isAdmin() || (signedIn() && resource.data.publicado == true);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /grade_horarios/{gradeHorarioId} {
+      allow get: if isAdmin() || signedIn();
+      allow list: if isAdmin() || (signedIn() && resource.data.ativo == true);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /horarios_fixos/{horarioFixoId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.alunaId == request.auth.uid);
+
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /assinaturas/{assinaturaId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.alunaId == request.auth.uid);
+
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /aulas/{aulaId} {
+      allow get, list: if isAdmin() || (
+        signedIn() && (
+          resource.data.alunaId == request.auth.uid ||
+          ownsHorarioFixoId(resource.data.horarioFixoId)
+        )
+      );
+
+      allow create: if isAdmin() || (
+        signedIn() &&
+        request.resource.data.alunaId == request.auth.uid &&
+        ownsHorarioFixoId(request.resource.data.horarioFixoId) &&
+        request.resource.data.status in ['agendada', 'cancelada']
+      );
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        resource.data.alunaId == request.auth.uid &&
+        onlyChanges([
+          'status',
+          'motivoCancelamento',
+          'dataCancelamento',
+          'origemCancelamento',
+          'dentroDosPrazo'
+        ]) &&
+        request.resource.data.status == 'cancelada' &&
+        request.resource.data.origemCancelamento == 'aluna'
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /reposicoes/{reposicaoId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.alunaId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        signedIn() &&
+        request.resource.data.alunaId == request.auth.uid &&
+        request.resource.data.status == 'pendente' &&
+        request.resource.data.atestadoValidado == null
+      );
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        resource.data.alunaId == request.auth.uid &&
+        request.resource.data.alunaId == resource.data.alunaId &&
+        request.resource.data.aulaOriginalId == resource.data.aulaOriginalId &&
+        request.resource.data.motivoOriginal == resource.data.motivoOriginal &&
+        request.resource.data.atestadoValidado == resource.data.atestadoValidado &&
+        request.resource.data.criadaEm == resource.data.criadaEm &&
+        request.resource.data.expiraEm == resource.data.expiraEm &&
+        request.resource.data.realizadaEm == resource.data.realizadaEm &&
+        onlyChanges(['status', 'novaDataHora', 'novoHorarioId', 'agendadaEm']) &&
+        (
+          (
+            resource.data.status == 'pendente' &&
+            request.resource.data.status == 'agendada' &&
+            request.resource.data.novaDataHora != null &&
+            request.resource.data.novoHorarioId != null &&
+            request.resource.data.agendadaEm != null
+          ) ||
+          (
+            resource.data.status == 'agendada' &&
+            request.resource.data.status == 'pendente' &&
+            request.resource.data.novaDataHora == null &&
+            request.resource.data.novoHorarioId == null &&
+            request.resource.data.agendadaEm == null
+          ) ||
+          (
+            resource.data.status == 'agendada' &&
+            request.resource.data.status == 'expirada'
+          )
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    match /solicitacoes_migracao_plano/{solicitacaoId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.alunaId == request.auth.uid);
+
+      allow create: if isAdmin() || (
+        signedIn() &&
+        request.resource.data.alunaId == request.auth.uid &&
+        ownsAssinaturaId(request.resource.data.assinaturaId) &&
+        activePlanExists(request.resource.data.planoDestinoId) &&
+        request.resource.data.status == 'pendente' &&
+        request.resource.data.respostaAdmin == null &&
+        request.resource.data.respondidoEm == null &&
+        request.resource.data.respondidoPor == null
+      );
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /notificacoes/{notificacaoId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.usuarioId == request.auth.uid);
+
+      allow create, delete: if isAdmin();
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        resource.data.usuarioId == request.auth.uid &&
+        onlyChanges(['lida']) &&
+        request.resource.data.lida == true
+      );
+    }
+
+    match /jornada_movimentos/{jornadaId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.alunaId == request.auth.uid);
+
+      allow create, delete: if isAdmin();
+
+      allow update: if isAdmin() || (
+        signedIn() &&
+        resource.data.alunaId == request.auth.uid &&
+        onlyChanges(['fotos'])
+      );
+    }
+
+    match /movimentos_pole/{movimentoId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /niveis_dificuldade_movimento/{nivelId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /pagamentos/{pagamentoId} {
+      allow get, list: if isAdmin() ||
+          (signedIn() && resource.data.alunaId == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /despesas_studio/{despesaId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

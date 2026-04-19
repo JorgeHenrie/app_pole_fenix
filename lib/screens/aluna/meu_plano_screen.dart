@@ -149,7 +149,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
             '4. Faltas sem aviso prévio não geram direito a reposição.\n'
             '5. O Fênix Pole Dance reserva-se o direito de alterar horários '
             'com aviso prévio de 48 horas.\n'
-            '6. O contrato se renova automaticamente a cada 30 dias.\n'
+            '6. O contrato se renova automaticamente ao fim do ciclo do plano.\n'
             '7. Para cancelamento do contrato, deve-se notificar o estúdio '
             'com 15 dias de antecedência.',
             style: const pw.TextStyle(lineSpacing: 4),
@@ -1127,7 +1127,7 @@ class _TermoAceiteContent extends StatelessWidget {
           '6. Pagamentos e Renovação',
           'O valor do plano deve ser pago mensalmente até o dia 10. O atraso '
               'no pagamento resultará na suspensão do acesso às aulas até a '
-              'regularização. O plano é renovado automaticamente a cada 30 dias.',
+              'regularização. O plano é renovado automaticamente ao fim do ciclo do plano.',
         ),
         Container(
           padding: const EdgeInsets.all(16),

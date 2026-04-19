@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_constants.dart';
+import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/jornada_movimento.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/grade_horario_provider.dart';
 import '../../providers/home_aluna_provider.dart';
+import '../../repositories/jornada_movimento_repository.dart';
 import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/aluna/eventos_section.dart';
 import '../../widgets/aluna/grade_horarios_studio_section.dart';
@@ -95,15 +99,20 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
                             PlanoStatusCard(
                               assinatura: homeProvider.assinatura,
                               plano: homeProvider.plano,
+                              nivelAluna: usuario?.nivel,
                             ),
+                            const SizedBox(height: 16),
+                            if (usuario != null)
+                              _MinhaJornadaPreviewCard(usuarioId: usuario.id),
                             const SizedBox(height: 24),
                             // Grade de horários do estúdio
                             const GradeHorariosStudioSection(),
-                            const SizedBox(height: 24),
-                            // Eventos próximos
-                            EventosSection(
-                              eventos: homeProvider.proximosEventos,
-                            ),
+                            if (AppConstants.muralEstudioHabilitado) ...[
+                              const SizedBox(height: 24),
+                              EventosSection(
+                                eventos: homeProvider.proximosEventos,
+                              ),
+                            ],
                             const SizedBox(height: 32),
                           ],
                         ),
@@ -136,6 +145,102 @@ class _HomeAlunaScreenState extends State<HomeAlunaScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MinhaJornadaPreviewCard extends StatelessWidget {
+  final String usuarioId;
+
+  const _MinhaJornadaPreviewCard({required this.usuarioId});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: FutureBuilder<List<JornadaMovimento>>(
+        future: JornadaMovimentoRepository().listarPorAluna(usuarioId),
+        builder: (context, snapshot) {
+          final jornada = snapshot.data ?? const <JornadaMovimento>[];
+          final total = jornada.length;
+
+          return InkWell(
+            onTap: () => Navigator.pushNamed(context, Routes.minhaJornada),
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppColors.primaryLight.withValues(alpha: 0.22),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          AppColors.primaryDark,
+                          AppColors.accentCocoa,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(
+                      Icons.auto_graph_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Minha Jornada',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          total == 0
+                              ? 'Acompanhe os movimentos que você já domina e registre sua evolução.'
+                              : 'Você já conquistou $total movimento(s). Toque para ver sua evolução.',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

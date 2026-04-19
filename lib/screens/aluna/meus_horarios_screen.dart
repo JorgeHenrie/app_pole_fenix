@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/aula.dart';
-import '../../models/grade_horario.dart';
 import '../../models/horario_fixo.dart';
 import '../../models/reposicao.dart';
-import '../../models/solicitacao_mudanca_horario.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/horario_fixo_provider.dart';
 import '../../repositories/aula_repository.dart';
-import '../../repositories/grade_horario_repository.dart';
+import '../../repositories/assinatura_repository.dart';
 import '../../repositories/reposicao_repository.dart';
-import '../../repositories/solicitacao_mudanca_horario_repository.dart';
 import '../../services/geracao_aulas_service.dart';
 import '../../widgets/common/loading_indicator.dart';
 
@@ -25,6 +23,7 @@ class MeusHorariosScreen extends StatefulWidget {
 
 class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
   final AulaRepository _aulaRepository = AulaRepository();
+  final AssinaturaRepository _assinaturaRepository = AssinaturaRepository();
   List<Aula> _proximasAulas = [];
   bool _carregandoAulas = false;
 
@@ -117,10 +116,7 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
         if (provider.horariosFixos.isEmpty)
           _buildEmptyHorarios()
         else
-          ...provider.horariosFixos.map((h) => _HorarioFixoCard(
-                horario: h,
-                onSolicitarMudanca: () => _mostrarSolicitarMudanca(h),
-              )),
+          ...provider.horariosFixos.map((h) => _HorarioFixoCard(horario: h)),
       ],
     );
   }
@@ -198,9 +194,29 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
         aula: aula,
         onConfirmar: (motivo) async {
           final dentroDosPrazo = aula.podeSerCancelada;
+          final usuario = context.read<AuthProvider>().usuario;
+          DateTime? expiraEm;
+
+          if (dentroDosPrazo && usuario != null) {
+            expiraEm =
+                await _assinaturaRepository.buscarFimDoCicloAtivo(usuario.id);
+            if (expiraEm == null) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Nao foi possivel identificar a vigencia do plano para liberar a reposicao.',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+
           await _aulaRepository.cancelarAula(aula.id, motivo, dentroDosPrazo);
           if (dentroDosPrazo) {
-            final usuario = context.read<AuthProvider>().usuario;
             if (usuario != null) {
               final reposicao = Reposicao(
                 id: '',
@@ -209,13 +225,12 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
                 status: 'pendente',
                 motivoOriginal: 'Cancelamento',
                 criadaEm: DateTime.now(),
-                expiraEm: DateTime.now().add(const Duration(days: 30)),
+                expiraEm: expiraEm,
               );
               await ReposicaoRepository().criar(reposicao);
             }
           }
           if (mounted) {
-            final usuario = context.read<AuthProvider>().usuario;
             if (usuario != null) {
               await _carregarProximasAulas(usuario.id);
             }
@@ -223,7 +238,7 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
               SnackBar(
                 content: Text(
                   dentroDosPrazo
-                      ? 'Aula cancelada. Você tem direito a reposição!'
+                      ? 'Aula cancelada. A reposicao pode ser usada ate ${DateFormatter.data(expiraEm!)}.'
                       : 'Aula cancelada. Você perdeu o crédito desta aula.',
                 ),
                 backgroundColor: dentroDosPrazo ? Colors.green : Colors.orange,
@@ -232,13 +247,6 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
           }
         },
       ),
-    );
-  }
-
-  Future<void> _mostrarSolicitarMudanca(HorarioFixo horario) async {
-    await showDialog(
-      context: context,
-      builder: (ctx) => _SolicitarMudancaDialog(horarioAtual: horario),
     );
   }
 }
@@ -273,11 +281,9 @@ DateTime _proximaOcorrencia(int diaSemana, String horario) {
 
 class _HorarioFixoCard extends StatelessWidget {
   final HorarioFixo horario;
-  final VoidCallback onSolicitarMudanca;
 
   const _HorarioFixoCard({
     required this.horario,
-    required this.onSolicitarMudanca,
   });
 
   @override
@@ -330,10 +336,6 @@ class _HorarioFixoCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-            TextButton(
-              onPressed: onSolicitarMudanca,
-              child: const Text('Mudar'),
             ),
           ],
         ),
@@ -612,181 +614,6 @@ class _CancelarAulaDialogState extends State<_CancelarAulaDialog> {
               : Text(dentroDosPrazo
                   ? 'Confirmar Cancelamento'
                   : 'Cancelar Mesmo Assim'),
-        ),
-      ],
-    );
-  }
-}
-
-class _SolicitarMudancaDialog extends StatefulWidget {
-  final HorarioFixo horarioAtual;
-  const _SolicitarMudancaDialog({required this.horarioAtual});
-
-  @override
-  State<_SolicitarMudancaDialog> createState() =>
-      _SolicitarMudancaDialogState();
-}
-
-class _SolicitarMudancaDialogState extends State<_SolicitarMudancaDialog> {
-  final _motivoController = TextEditingController();
-  int? _novoDiaSemana;
-  String? _novoHorario;
-  bool _processando = false;
-  List<GradeHorario> _horariosDisponiveis = [];
-  bool _carregandoGrade = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _carregarGrade();
-  }
-
-  Future<void> _carregarGrade() async {
-    setState(() => _carregandoGrade = true);
-    try {
-      final grade = await GradeHorarioRepository().listarAtivos();
-      setState(() => _horariosDisponiveis = grade);
-    } catch (_) {}
-    setState(() => _carregandoGrade = false);
-  }
-
-  @override
-  void dispose() {
-    _motivoController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const diasSemana = {
-      1: 'Segunda-feira',
-      2: 'Terça-feira',
-      3: 'Quarta-feira',
-      4: 'Quinta-feira',
-      5: 'Sexta-feira',
-      6: 'Sábado',
-      7: 'Domingo',
-    };
-
-    final diasComHorarios =
-        _horariosDisponiveis.map((h) => h.diaSemana).toSet().toList()..sort();
-
-    final horariosParaDia = _novoDiaSemana != null
-        ? _horariosDisponiveis
-            .where((h) => h.diaSemana == _novoDiaSemana)
-            .toList()
-        : <GradeHorario>[];
-
-    return AlertDialog(
-      title: const Text('Solicitar Mudança de Horário'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Horário atual: ${widget.horarioAtual.diaSemanaTexto} às ${widget.horarioAtual.horario}',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 16),
-            const Text('Novo dia da semana:'),
-            const SizedBox(height: 8),
-            if (_carregandoGrade)
-              const CircularProgressIndicator()
-            else
-              DropdownButtonFormField<int>(
-                value: _novoDiaSemana,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                hint: const Text('Selecione o dia'),
-                items: diasComHorarios
-                    .map((d) => DropdownMenuItem(
-                          value: d,
-                          child: Text(diasSemana[d] ?? 'Dia $d'),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  _novoDiaSemana = v;
-                  _novoHorario = null;
-                }),
-              ),
-            if (_novoDiaSemana != null) ...[
-              const SizedBox(height: 12),
-              const Text('Novo horário:'),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _novoHorario,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                hint: const Text('Selecione o horário'),
-                items: horariosParaDia
-                    .map((h) => DropdownMenuItem(
-                          value: h.horario,
-                          child: Text(h.horario),
-                        ))
-                    .toList(),
-                onChanged: (v) => setState(() => _novoHorario = v),
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: _motivoController,
-              decoration: const InputDecoration(
-                labelText: 'Motivo da mudança (opcional)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: (_novoDiaSemana == null ||
-                  _novoHorario == null ||
-                  _processando)
-              ? null
-              : () async {
-                  setState(() => _processando = true);
-                  try {
-                    final usuario = context.read<AuthProvider>().usuario;
-                    if (usuario != null) {
-                      final solicitacao = SolicitacaoMudancaHorario(
-                        id: '',
-                        alunaId: usuario.id,
-                        horarioFixoAntigoId: widget.horarioAtual.id,
-                        novoDiaSemana: _novoDiaSemana!,
-                        novoHorario: _novoHorario!,
-                        motivo: _motivoController.text,
-                        status: 'pendente',
-                        solicitadoEm: DateTime.now(),
-                      );
-                      await SolicitacaoMudancaHorarioRepository()
-                          .criar(solicitacao);
-                    }
-                    if (mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Solicitação enviada! Aguarde aprovação.'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    setState(() => _processando = false);
-                  }
-                },
-          child: _processando
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Enviar Solicitação'),
         ),
       ],
     );

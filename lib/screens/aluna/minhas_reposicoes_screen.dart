@@ -76,6 +76,7 @@ class _MinhasReposicoesScreenState extends State<MinhasReposicoesScreen>
                       provider.agendadas,
                       'Nenhuma reposição agendada',
                       Icons.event_available,
+                      showCancelarAgendada: true,
                     ),
                     _buildLista(
                       provider.historico,
@@ -118,6 +119,7 @@ class _MinhasReposicoesScreenState extends State<MinhasReposicoesScreen>
     String mensagemVazio,
     IconData iconVazio, {
     bool showAgendar = false,
+    bool showCancelarAgendada = false,
   }) {
     if (reposicoes.isEmpty) {
       return Center(
@@ -142,8 +144,12 @@ class _MinhasReposicoesScreenState extends State<MinhasReposicoesScreen>
         itemBuilder: (context, index) => _ReposicaoCard(
           reposicao: reposicoes[index],
           showAgendar: showAgendar,
+          showCancelarAgendada: showCancelarAgendada,
           onAgendar: showAgendar
               ? () => _mostrarAgendarReposicao(reposicoes[index])
+              : null,
+          onCancelarAgendada: showCancelarAgendada
+              ? () => _mostrarCancelarReposicao(reposicoes[index])
               : null,
         ),
       ),
@@ -177,17 +183,85 @@ class _MinhasReposicoesScreenState extends State<MinhasReposicoesScreen>
       ),
     );
   }
+
+  Future<void> _mostrarCancelarReposicao(Reposicao reposicao) async {
+    final dataHora = reposicao.novaDataHora;
+    if (dataHora == null) return;
+
+    final dentroDoPrazo = dataHora.difference(DateTime.now()).inHours >= 2;
+
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancelar reposição'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Data: ${DateFormatter.dataHora(dataHora)}'),
+            const SizedBox(height: 12),
+            Text(
+              dentroDoPrazo
+                  ? 'Se você cancelar agora, essa reposição voltará a ficar disponível para reagendamento.'
+                  : 'Você está cancelando com menos de 2 horas de antecedência e perderá esta reposição.',
+              style: TextStyle(
+                color: dentroDoPrazo ? AppColors.info : AppColors.warning,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Voltar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            child: const Text('Confirmar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar != true || !mounted) return;
+
+    final resultado = await context
+        .read<ReposicaoProvider>()
+        .cancelarReposicaoAgendada(reposicao);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          resultado.erro ?? resultado.mensagemSucesso ?? 'Reposição cancelada.',
+        ),
+        backgroundColor: resultado.erro != null
+            ? AppColors.error
+            : (resultado.manteveReposicao
+                ? AppColors.success
+                : AppColors.warning),
+      ),
+    );
+  }
 }
 
 class _ReposicaoCard extends StatelessWidget {
   final Reposicao reposicao;
   final bool showAgendar;
+  final bool showCancelarAgendada;
   final VoidCallback? onAgendar;
+  final VoidCallback? onCancelarAgendada;
 
   const _ReposicaoCard({
     required this.reposicao,
     required this.showAgendar,
+    this.showCancelarAgendada = false,
     this.onAgendar,
+    this.onCancelarAgendada,
   });
 
   @override
@@ -254,8 +328,8 @@ class _ReposicaoCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Criada em: ${DateFormatter.data(reposicao.criadaEm)}',
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13),
+              style:
+                  const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             if (reposicao.expiraEm != null &&
                 reposicao.status == 'pendente') ...[
@@ -285,6 +359,21 @@ class _ReposicaoCard extends StatelessWidget {
                   onPressed: onAgendar,
                   icon: const Icon(Icons.calendar_today, size: 16),
                   label: const Text('Agendar Reposição'),
+                ),
+              ),
+            ],
+            if (showCancelarAgendada && reposicao.novaDataHora != null) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onCancelarAgendada,
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: const Text('Cancelar reposição'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
+                  ),
                 ),
               ),
             ],
@@ -377,8 +466,7 @@ class _AgendarReposicaoSheetState extends State<_AgendarReposicaoSheet> {
                   final selected = _selecionado?.id == item.id;
                   return ListTile(
                     selected: selected,
-                    selectedTileColor:
-                        AppColors.primary.withValues(alpha: 0.1),
+                    selectedTileColor: AppColors.primary.withValues(alpha: 0.1),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

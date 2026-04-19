@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/aula.dart';
 import '../../models/reposicao.dart';
+import '../../repositories/assinatura_repository.dart';
 import '../../repositories/reposicao_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
 
@@ -15,6 +16,7 @@ class ValidarAtestadosScreen extends StatefulWidget {
 }
 
 class _ValidarAtestadosScreenState extends State<ValidarAtestadosScreen> {
+  final AssinaturaRepository _assinaturaRepo = AssinaturaRepository();
   final ReposicaoRepository _reposicaoRepo = ReposicaoRepository();
 
   List<Aula> _faltasComAtestado = [];
@@ -60,6 +62,14 @@ class _ValidarAtestadosScreenState extends State<ValidarAtestadosScreen> {
 
   Future<void> _aprovar(Aula aula) async {
     try {
+      final expiraEm =
+          await _assinaturaRepo.buscarFimDoCicloAtivo(aula.alunaId);
+      if (expiraEm == null) {
+        throw StateError(
+          'Nao foi possivel identificar a vigencia do plano para criar a reposicao.',
+        );
+      }
+
       await FirebaseFirestore.instance.collection('aulas').doc(aula.id).update({
         'atestadoPendente': false,
         'atestadoValidado': true,
@@ -72,7 +82,7 @@ class _ValidarAtestadosScreenState extends State<ValidarAtestadosScreen> {
         motivoOriginal: 'Falta com atestado',
         atestadoValidado: true,
         criadaEm: DateTime.now(),
-        expiraEm: DateTime.now().add(const Duration(days: 30)),
+        expiraEm: expiraEm,
       );
       await _reposicaoRepo.criar(reposicao);
       if (mounted) {
@@ -80,8 +90,10 @@ class _ValidarAtestadosScreenState extends State<ValidarAtestadosScreen> {
           _faltasComAtestado.removeWhere((item) => item.id == aula.id);
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Atestado aprovado! Reposição criada para a aluna.'),
+          SnackBar(
+            content: Text(
+              'Atestado aprovado! Reposicao criada para uso ate ${DateFormatter.data(expiraEm)}.',
+            ),
             backgroundColor: Colors.green,
           ),
         );

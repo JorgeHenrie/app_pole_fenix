@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_constants.dart';
 import '../models/assinatura.dart';
 import '../models/aula.dart';
 import '../models/evento.dart';
@@ -8,12 +9,14 @@ import '../models/plano.dart';
 import '../repositories/assinatura_repository.dart';
 import '../repositories/aula_repository.dart';
 import '../repositories/evento_repository.dart';
+import '../services/firebase/app_functions_service.dart';
 
 /// Provider responsável pelos dados da tela inicial da aluna.
 class HomeAlunaProvider extends ChangeNotifier {
   final AssinaturaRepository _assinaturaRepository = AssinaturaRepository();
   final AulaRepository _aulaRepository = AulaRepository();
   final EventoRepository _eventoRepository = EventoRepository();
+  final AppFunctionsService _functionsService = AppFunctionsService();
 
   Assinatura? _assinatura;
   Plano? _plano;
@@ -62,20 +65,28 @@ class HomeAlunaProvider extends ChangeNotifier {
     // Dar baixa automática em aulas cujo horário já passou.
     // Faz isso antes de carregar as próximas aulas para manter créditos corretos.
     if (_assinatura != null && _assinatura!.estaAtiva) {
-      final baixas = await _aulaRepository.darBaixaAulasPassadas(
-        alunaId,
-        _assinatura!.id,
-      );
+      try {
+        final baixas = await _functionsService.sincronizarMinhasAulasPassadas();
 
-      if (baixas > 0) {
-        await _carregarAssinatura(alunaId);
+        if (baixas > 0) {
+          await _carregarAssinatura(alunaId);
+        }
+      } catch (e) {
+        debugPrint('HomeAlunaProvider._sincronizarAulasPassadas erro: $e');
       }
     }
 
-    await Future.wait([
+    final tarefas = <Future<void>>[
       _carregarProximasAulas(alunaId),
-      _carregarEventos(),
-    ]);
+    ];
+
+    if (AppConstants.muralEstudioHabilitado) {
+      tarefas.add(_carregarEventos());
+    } else {
+      _proximosEventos = [];
+    }
+
+    await Future.wait(tarefas);
   }
 
   Future<void> _carregarAssinatura(String alunaId) async {
@@ -109,10 +120,7 @@ class HomeAlunaProvider extends ChangeNotifier {
 
   Future<void> _carregarEventos() async {
     try {
-      final todos = await _eventoRepository.listarPublicados();
-      final agora = DateTime.now();
-      _proximosEventos =
-          todos.where((e) => e.dataHora.isAfter(agora)).take(3).toList();
+      _proximosEventos = await _eventoRepository.listarPublicados(limite: 5);
     } catch (e) {
       debugPrint('HomeAlunaProvider._carregarEventos erro: $e');
       _proximosEventos = [];

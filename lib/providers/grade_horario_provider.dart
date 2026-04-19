@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/utils/date_formatter.dart';
 import '../models/aula.dart';
 import '../models/assinatura.dart';
 import '../models/grade_horario.dart';
 import '../models/horario_fixo.dart';
 import '../models/reposicao.dart';
+import '../repositories/assinatura_repository.dart';
 import '../repositories/aula_repository.dart';
 import '../repositories/grade_horario_repository.dart';
 import '../repositories/horario_fixo_repository.dart';
@@ -31,10 +33,12 @@ class SlotDia {
 class ResultadoCancelamentoAula {
   final String? erro;
   final bool criouReposicao;
+  final String? mensagemSucesso;
 
   const ResultadoCancelamentoAula({
     this.erro,
     this.criouReposicao = false,
+    this.mensagemSucesso,
   });
 
   bool get sucesso => erro == null;
@@ -42,13 +46,16 @@ class ResultadoCancelamentoAula {
 
 /// Provider responsável pela grade de horários do estúdio e agendamento de reposições.
 class GradeHorarioProvider extends ChangeNotifier {
+  final AssinaturaRepository _assinaturaRepo = AssinaturaRepository();
   final AulaRepository _aulaRepo = AulaRepository();
   final GradeHorarioRepository _gradeRepo = GradeHorarioRepository();
   final ReposicaoRepository _reposicaoRepo = ReposicaoRepository();
   final HorarioFixoRepository _horarioFixoRepo = HorarioFixoRepository();
 
+  Assinatura? _assinaturaAtual;
   List<SlotDia> _slots = [];
   List<Reposicao> _reposicoesPendentes = [];
+  List<Reposicao> _reposicoesAgendadas = [];
   Set<String> _slotsComAulaFixaDaAluna = {};
   String? _primeiroNomeAluna;
 
@@ -77,14 +84,24 @@ class GradeHorarioProvider extends ChangeNotifier {
     _erro = null;
     notifyListeners();
     try {
+      _assinaturaAtual =
+          assinatura ?? await _assinaturaRepo.buscarAtivaDeAluna(alunaId);
+
       final resultados = await Future.wait([
         _gradeRepo.listarAtivos(),
-        _reposicaoRepo.buscarPendentesPorAluna(alunaId),
+        _reposicaoRepo.buscarPorAluna(alunaId),
         _horarioFixoRepo.buscarPorAluna(alunaId),
       ]);
 
       final grade = resultados[0] as List<GradeHorario>;
-      _reposicoesPendentes = resultados[1] as List<Reposicao>;
+      final reposicoes = resultados[1] as List<Reposicao>;
+      _reposicoesPendentes = reposicoes
+          .where((reposicao) =>
+              reposicao.status == 'pendente' && !reposicao.expirou)
+          .toList();
+      _reposicoesAgendadas = reposicoes
+          .where((reposicao) => reposicao.status == 'agendada')
+          .toList();
       _horariosDaAluna = resultados[2] as List<HorarioFixo>;
 
       final nomeInformado = nomeAluna?.trim() ?? '';
@@ -101,7 +118,7 @@ class GradeHorarioProvider extends ChangeNotifier {
 
       final agora = DateTime.now();
       // Limita ao período do contrato vigente ou próximos 14 dias
-      final contrato = assinatura?.dataRenovacao;
+      final contrato = _assinaturaAtual?.fimDoCiclo;
       final limite = (contrato != null && contrato.isAfter(agora))
           ? contrato
           : agora.add(const Duration(days: 14));
@@ -263,6 +280,18 @@ class GradeHorarioProvider extends ChangeNotifier {
         .firstOrNull;
   }
 
+  Reposicao? reposicaoAgendadaParaSlot(SlotDia slot) {
+    return _reposicoesAgendadas
+        .where((reposicao) =>
+            reposicao.novoHorarioId == slot.gradeHorario.id &&
+            _mesmaDataHora(reposicao.novaDataHora, slot.dataHora))
+        .firstOrNull;
+  }
+
+  bool slotTemReposicaoAgendadaDaAluna(SlotDia slot) {
+    return reposicaoAgendadaParaSlot(slot) != null;
+  }
+
   /// Agenda uma reposição no slot indicado.
   Future<bool> agendarReposicao({
     required Reposicao reposicao,
@@ -290,6 +319,15 @@ class GradeHorarioProvider extends ChangeNotifier {
           ],
         );
       }
+      _reposicoesAgendadas = [
+        ..._reposicoesAgendadas,
+        reposicao.copyWith(
+          status: 'agendada',
+          novaDataHora: slot.dataHora,
+          novoHorarioId: slot.gradeHorario.id,
+          agendadaEm: DateTime.now(),
+        ),
+      ];
       notifyListeners();
       return true;
     } catch (e) {
@@ -313,8 +351,8 @@ class GradeHorarioProvider extends ChangeNotifier {
 
   /// Retorna true se a aluna tem um horário fixo que corresponde a este slot.
   bool alunaEstaInscrita(SlotDia slot) {
-    final horario = horarioFixoParaSlot(slot);
-    return horario != null;
+    return horarioFixoParaSlot(slot) != null ||
+        reposicaoAgendadaParaSlot(slot) != null;
   }
 
   /// Retorna o HorarioFixo da aluna para este slot, se existir.
@@ -353,17 +391,39 @@ class GradeHorarioProvider extends ChangeNotifier {
     }
 
     final horarioFixo = horarioFixoParaSlot(slot);
-    if (horarioFixo == null) {
+    final reposicaoAgendada = reposicaoAgendadaParaSlot(slot);
+    if (horarioFixo == null && reposicaoAgendada == null) {
       return const ResultadoCancelamentoAula(
-        erro: 'Horário fixo não encontrado.',
+        erro: 'Inscrição não encontrada para este horário.',
       );
     }
 
     final dentroDoPrazo = slot.dataHora.difference(agora).inHours >= 2;
 
+    if (reposicaoAgendada != null && horarioFixo == null) {
+      return _cancelarReposicaoAgendada(
+        slot: slot,
+        reposicao: reposicaoAgendada,
+        dentroDoPrazo: dentroDoPrazo,
+      );
+    }
+
+    final horarioFixoInscricao = horarioFixo!;
+
     try {
+      DateTime? expira;
+      if (dentroDoPrazo) {
+        expira = await _buscarFimDoCicloDoPlano(alunaId);
+        if (expira == null) {
+          return const ResultadoCancelamentoAula(
+            erro:
+                'Nao foi possivel identificar a vigencia do plano para liberar a reposicao.',
+          );
+        }
+      }
+
       final aulaExistente = await _aulaRepo.buscarPorHorarioFixoEDataHora(
-        horarioFixo.id,
+        horarioFixoInscricao.id,
         slot.dataHora,
       );
 
@@ -392,7 +452,7 @@ class GradeHorarioProvider extends ChangeNotifier {
       } else {
         batch.set(aulaRef, {
           'alunaId': alunaId,
-          'horarioFixoId': horarioFixo.id,
+          'horarioFixoId': horarioFixoInscricao.id,
           'dataHora': slot.dataHora.toIso8601String(),
           'modalidade': slot.gradeHorario.modalidade,
           ...dadosCancelamento,
@@ -400,10 +460,9 @@ class GradeHorarioProvider extends ChangeNotifier {
         });
       }
 
-      DateTime? expira;
       DocumentReference<Map<String, dynamic>>? reposicaoRef;
       if (dentroDoPrazo) {
-        expira = DateTime(agora.year, agora.month + 1, agora.day);
+        final expiraEm = expira!;
         reposicaoRef =
             FirebaseFirestore.instance.collection('reposicoes').doc();
         batch.set(reposicaoRef, {
@@ -415,7 +474,7 @@ class GradeHorarioProvider extends ChangeNotifier {
           'motivoOriginal': motivo,
           'atestadoValidado': null,
           'criadaEm': Timestamp.fromDate(agora),
-          'expiraEm': Timestamp.fromDate(expira),
+          'expiraEm': Timestamp.fromDate(expiraEm),
           'agendadaEm': null,
           'realizadaEm': null,
         });
@@ -463,7 +522,12 @@ class GradeHorarioProvider extends ChangeNotifier {
       }
 
       notifyListeners();
-      return ResultadoCancelamentoAula(criouReposicao: dentroDoPrazo);
+      return ResultadoCancelamentoAula(
+        criouReposicao: dentroDoPrazo,
+        mensagemSucesso: dentroDoPrazo
+            ? 'Aula cancelada! A reposicao pode ser usada ate ${DateFormatter.data(expira!)}, dentro do ciclo do seu plano.'
+            : 'Aula cancelada. Você perdeu o crédito desta aula.',
+      );
     } catch (e) {
       debugPrint('GradeHorarioProvider.cancelarAulaECriarReposicao: $e');
       return const ResultadoCancelamentoAula(
@@ -472,14 +536,82 @@ class GradeHorarioProvider extends ChangeNotifier {
     }
   }
 
+  Future<ResultadoCancelamentoAula> _cancelarReposicaoAgendada({
+    required SlotDia slot,
+    required Reposicao reposicao,
+    required bool dentroDoPrazo,
+  }) async {
+    try {
+      if (dentroDoPrazo) {
+        await _reposicaoRepo.desagendar(reposicao.id);
+        _reposicoesAgendadas.removeWhere((item) => item.id == reposicao.id);
+        _reposicoesPendentes = [
+          ..._reposicoesPendentes,
+          reposicao.copyWith(
+            status: 'pendente',
+            novaDataHora: null,
+            novoHorarioId: null,
+            agendadaEm: null,
+          ),
+        ];
+      } else {
+        await _reposicaoRepo.marcarExpirada(reposicao.id);
+        _reposicoesAgendadas.removeWhere((item) => item.id == reposicao.id);
+      }
+
+      final idx = _slots.indexWhere((s) =>
+          s.gradeHorario.id == slot.gradeHorario.id &&
+          s.dataHora == slot.dataHora);
+      if (idx >= 0) {
+        final s = _slots[idx];
+        final primeiroNome = _primeiroNomeAluna?.toLowerCase();
+        if (primeiroNome != null && primeiroNome.isNotEmpty) {
+          _slots[idx] = SlotDia(
+            gradeHorario: s.gradeHorario,
+            dataHora: s.dataHora,
+            nomesMatriculados: s.nomesMatriculados
+                .where((n) => n.toLowerCase() != primeiroNome)
+                .toList(),
+          );
+        }
+      }
+
+      notifyListeners();
+
+      return ResultadoCancelamentoAula(
+        criouReposicao: dentroDoPrazo,
+        mensagemSucesso: dentroDoPrazo
+            ? 'Reposição cancelada. Ela voltou a ficar disponível para reagendamento.'
+            : 'Reposição cancelada. Você perdeu esta reposição.',
+      );
+    } catch (e) {
+      debugPrint('GradeHorarioProvider._cancelarReposicaoAgendada: $e');
+      return const ResultadoCancelamentoAula(
+        erro: 'Erro ao cancelar a reposição. Tente novamente.',
+      );
+    }
+  }
+
   void limpar() {
+    _assinaturaAtual = null;
     _slots = [];
     _reposicoesPendentes = [];
+    _reposicoesAgendadas = [];
     _horariosDaAluna = [];
     _slotsComAulaFixaDaAluna = {};
     _primeiroNomeAluna = null;
     _erro = null;
     notifyListeners();
+  }
+
+  bool _mesmaDataHora(DateTime? a, DateTime b) {
+    if (a == null) return false;
+
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day &&
+        a.hour == b.hour &&
+        a.minute == b.minute;
   }
 
   static (int, int) _extrairHorarioInicio(String horario) {
@@ -502,5 +634,12 @@ class GradeHorarioProvider extends ChangeNotifier {
 
   static String _chaveReposicaoSlot(String gradeHorarioId, DateTime dataHora) {
     return '$gradeHorarioId|${dataHora.toIso8601String()}';
+  }
+
+  Future<DateTime?> _buscarFimDoCicloDoPlano(String alunaId) async {
+    final assinatura =
+        _assinaturaAtual ?? await _assinaturaRepo.buscarAtivaDeAluna(alunaId);
+    _assinaturaAtual = assinatura;
+    return assinatura?.fimDoCiclo;
   }
 }

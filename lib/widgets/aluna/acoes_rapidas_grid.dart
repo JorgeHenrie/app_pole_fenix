@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -28,12 +29,13 @@ class AcoesRapidasGrid extends StatelessWidget {
         cor: AppColors.accentCocoa,
         rota: Routes.meuPlano,
       ),
-      _AcaoRapida(
-        icone: Icons.celebration_outlined,
-        rotulo: 'Eventos',
-        cor: AppColors.accentCaramel,
-        rota: Routes.eventos,
-      ),
+      if (AppConstants.muralEstudioHabilitado)
+        _AcaoRapida(
+          icone: Icons.campaign_outlined,
+          rotulo: 'Avisos',
+          cor: AppColors.accentCaramel,
+          rota: Routes.eventos,
+        ),
       _AcaoRapida(
         icone: Icons.person_outline,
         rotulo: 'Perfil',

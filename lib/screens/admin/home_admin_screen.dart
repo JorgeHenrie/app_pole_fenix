@@ -86,6 +86,14 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
           _buildSectionTitle(context, 'Horários e Agendamentos'),
           _buildMenuCard(
             context,
+            icon: Icons.view_timeline_rounded,
+            title: 'Agenda do Dia',
+            subtitle: 'Visualizar aulas diárias e alunas confirmadas',
+            color: AppColors.primaryDark,
+            rota: Routes.agendaAdmin,
+          ),
+          _buildMenuCard(
+            context,
             icon: Icons.schedule,
             title: 'Gerenciar Grade de Horários',
             subtitle: 'Criar e editar horários do estúdio',
@@ -126,16 +134,24 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             color: AppColors.accentCocoa,
             rota: Routes.gerenciarPlanos,
           ),
-          const SizedBox(height: 8),
-          _buildSectionTitle(context, 'Gestão'),
           _buildMenuCard(
             context,
-            icon: Icons.swap_horiz,
-            title: 'Solicitacoes de Mudanca',
-            subtitle: 'Responder pedidos de troca de horario',
-            color: AppColors.primaryDark,
-            rota: Routes.aprovarSolicitacoes,
+            icon: Icons.auto_graph_rounded,
+            title: 'Jornada das Alunas',
+            subtitle: 'Cadastrar movimentos e liberar conquistas',
+            color: AppColors.accentSand,
+            rota: Routes.gerenciarJornada,
           ),
+          _buildMenuCard(
+            context,
+            icon: Icons.campaign_outlined,
+            title: 'Timeline de Avisos',
+            subtitle: 'Cadastrar artes, comunicados e eventos para as alunas',
+            color: AppColors.accentCaramel,
+            rota: Routes.gerenciarAvisos,
+          ),
+          const SizedBox(height: 8),
+          _buildSectionTitle(context, 'Gestão'),
           _buildMenuCard(
             context,
             icon: Icons.medical_information_outlined,
@@ -143,6 +159,15 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
             subtitle: 'Aprovar ou rejeitar faltas com atestado',
             color: AppColors.accentSand,
             rota: Routes.validarAtestados,
+          ),
+          _buildMenuCard(
+            context,
+            icon: Icons.swap_horizontal_circle_outlined,
+            title: 'Migrações de Plano',
+            subtitle: 'Aprovar ou rejeitar pedidos de troca de plano',
+            color: AppColors.primaryDark,
+            rota: Routes.migracoesPlano,
+            badge: _migracoesPendentesCount,
           ),
           _buildMenuCard(
             context,
@@ -207,7 +232,9 @@ class _HomeAdminScreenState extends State<HomeAdminScreen> {
       child: ListTile(
         onTap: () async {
           await Navigator.pushNamed(context, rota);
-          if (rota == Routes.aprovarCadastros || rota == Routes.pagamentos) {
+          if (rota == Routes.aprovarCadastros ||
+              rota == Routes.pagamentos ||
+              rota == Routes.migracoesPlano) {
             _carregarPendentes();
           }
         },

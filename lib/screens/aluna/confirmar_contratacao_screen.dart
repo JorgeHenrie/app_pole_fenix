@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
-import '../../models/assinatura.dart';
 import '../../models/grade_horario.dart';
-import '../../models/horario_fixo.dart';
 import '../../models/plano.dart';
-import '../../providers/auth_provider.dart';
-import '../../repositories/assinatura_repository.dart';
-import '../../repositories/horario_fixo_repository.dart';
-import '../../services/geracao_aulas_service.dart';
+import '../../services/firebase/app_functions_service.dart';
 import '../../widgets/common/custom_button.dart';
 import '../../widgets/dialogs/erro_dialog.dart';
 
@@ -33,9 +26,7 @@ class ConfirmarContratacaoScreen extends StatefulWidget {
 
 class _ConfirmarContratacaoScreenState
     extends State<ConfirmarContratacaoScreen> {
-  final AssinaturaRepository _assinaturaRepo = AssinaturaRepository();
-  final HorarioFixoRepository _horarioFixoRepo = HorarioFixoRepository();
-  final GeracaoAulasService _geracaoService = GeracaoAulasService();
+  final AppFunctionsService _functionsService = AppFunctionsService();
 
   bool _aceitoTermos = false;
   bool _carregando = false;
@@ -54,59 +45,11 @@ class _ConfirmarContratacaoScreenState
     setState(() => _carregando = true);
 
     try {
-      final usuario = context.read<AuthProvider>().usuario!;
-      const uuid = Uuid();
-      final agora = DateTime.now();
-
-      // 1. Criar Assinatura
-      final assinatura = Assinatura(
-        id: uuid.v4(),
-        alunaId: usuario.id,
+      await _functionsService.contratarPlano(
         planoId: widget.plano.id,
-        status: 'ativa',
-        creditosDisponiveis: widget.plano.aulasPorMes,
-        dataInicio: agora,
-        dataRenovacao: agora.add(Duration(days: widget.plano.duracaoDias)),
-        horarioFixoIds: const [],
-        aulasRealizadas: 0,
-        reposicoesDisponiveis: 0,
+        horariosEscolhidos: widget.horariosEscolhidos,
       );
 
-      await _assinaturaRepo.criar(assinatura);
-
-      // 2. Criar Horários Fixos e gerar aulas
-      final List<String> horarioFixoIds = [];
-
-      for (final gradeHorario in widget.horariosEscolhidos) {
-        final horarioFixoData = HorarioFixo(
-          id: '',
-          alunaId: usuario.id,
-          assinaturaId: assinatura.id,
-          diaSemana: gradeHorario.diaSemana,
-          horario: gradeHorario.horario,
-          modalidade: gradeHorario.modalidade,
-          ativo: true,
-          criadoEm: agora,
-        );
-
-        final horarioFixoId = await _horarioFixoRepo.criar(horarioFixoData);
-        final horarioFixo = horarioFixoData.copyWith(id: horarioFixoId);
-        horarioFixoIds.add(horarioFixoId);
-
-        // 3. Gerar aulas automaticamente para as próximas 4 semanas
-        await _geracaoService.gerarAulasParaHorarioFixo(
-          horarioFixo,
-          semanas: 4,
-        );
-      }
-
-      // 4. Atualizar assinatura com IDs dos horários fixos
-      final assinaturaAtualizada = assinatura.copyWith(
-        horarioFixoIds: horarioFixoIds,
-      );
-      await _assinaturaRepo.salvar(assinaturaAtualizada);
-
-      // 5. Navegar para tela de sucesso
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(
           Routes.sucessoContratacao,
@@ -117,12 +60,19 @@ class _ConfirmarContratacaoScreenState
       if (mounted) {
         await ErroDialog.mostrar(
           context: context,
-          mensagem: 'Erro ao processar contratação: $e',
+          mensagem: 'Erro ao processar contratação: ${_mensagemErro(e)}',
         );
       }
     } finally {
       if (mounted) setState(() => _carregando = false);
     }
+  }
+
+  String _mensagemErro(Object erro) {
+    final texto = erro.toString();
+    return texto.startsWith('Bad state: ')
+        ? texto.substring('Bad state: '.length)
+        : texto;
   }
 
   @override
@@ -155,8 +105,7 @@ class _ConfirmarContratacaoScreenState
                             fontWeight: FontWeight.w600, fontSize: 16)),
                     const SizedBox(height: 4),
                     Text('${widget.plano.aulasPorMes} aulas/mês',
-                        style: const TextStyle(
-                            color: AppColors.textSecondary)),
+                        style: const TextStyle(color: AppColors.textSecondary)),
                     const SizedBox(height: 4),
                     Text(
                       'R\$ ${widget.plano.preco.toStringAsFixed(2)}/mês',
@@ -206,8 +155,7 @@ class _ConfirmarContratacaoScreenState
             // Checkbox de aceite
             CheckboxListTile(
               value: _aceitoTermos,
-              onChanged: (v) =>
-                  setState(() => _aceitoTermos = v ?? false),
+              onChanged: (v) => setState(() => _aceitoTermos = v ?? false),
               title: const Text('Concordo com os termos e condições'),
               activeColor: AppColors.primary,
               contentPadding: EdgeInsets.zero,
@@ -220,8 +168,9 @@ class _ConfirmarContratacaoScreenState
               width: double.infinity,
               child: CustomButton(
                 texto: 'Confirmar Contratação',
-                onPressed:
-                    _aceitoTermos && !_carregando ? _confirmarContratacao : null,
+                onPressed: _aceitoTermos && !_carregando
+                    ? _confirmarContratacao
+                    : null,
                 carregando: _carregando,
               ),
             ),
