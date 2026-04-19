@@ -20,6 +20,14 @@ service cloud.firestore {
           (request.auth.token.admin == true || isAdminByDocument());
     }
 
+    function canReadEvento(eventoId) {
+      return isAdmin() || (
+        signedIn() &&
+        exists(/databases/$(database)/documents/eventos/$(eventoId)) &&
+        get(/databases/$(database)/documents/eventos/$(eventoId)).data.publicado == true
+      );
+    }
+
     function onlyChanges(allowedKeys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedKeys);
     }
@@ -77,6 +85,75 @@ service cloud.firestore {
     match /eventos/{eventoId} {
       allow get, list: if isAdmin() || (signedIn() && resource.data.publicado == true);
       allow create, update, delete: if isAdmin();
+
+      match /reacoes/{userId} {
+        allow get, list: if canReadEvento(eventoId);
+
+        allow create: if signedIn() &&
+            request.auth.uid == userId &&
+            canReadEvento(eventoId) &&
+            request.resource.data.keys().hasOnly([
+              'usuarioId',
+              'usuarioNome',
+              'tipo',
+              'criadoEm',
+              'atualizadoEm'
+            ]) &&
+            request.resource.data.usuarioId == request.auth.uid &&
+            request.resource.data.usuarioNome is string &&
+            request.resource.data.usuarioNome.size() > 0 &&
+            request.resource.data.tipo in ['curtir', 'amar'] &&
+            request.resource.data.criadoEm is timestamp &&
+            (request.resource.data.atualizadoEm == null || request.resource.data.atualizadoEm is timestamp);
+
+        allow update: if signedIn() &&
+            request.auth.uid == userId &&
+            canReadEvento(eventoId) &&
+            request.resource.data.keys().hasOnly([
+              'usuarioId',
+              'usuarioNome',
+              'tipo',
+              'criadoEm',
+              'atualizadoEm'
+            ]) &&
+            request.resource.data.usuarioId == resource.data.usuarioId &&
+            request.resource.data.usuarioNome is string &&
+            request.resource.data.usuarioNome.size() > 0 &&
+            request.resource.data.tipo in ['curtir', 'amar'] &&
+            request.resource.data.criadoEm == resource.data.criadoEm &&
+            request.resource.data.atualizadoEm is timestamp;
+
+        allow delete: if signedIn() &&
+            request.auth.uid == userId &&
+            canReadEvento(eventoId);
+      }
+
+      match /comentarios/{comentarioId} {
+        allow get, list: if canReadEvento(eventoId);
+
+        allow create: if signedIn() &&
+            canReadEvento(eventoId) &&
+            request.resource.data.keys().hasOnly([
+              'autorId',
+              'autorNome',
+              'texto',
+              'criadoEm'
+            ]) &&
+            request.resource.data.autorId == request.auth.uid &&
+            request.resource.data.autorNome is string &&
+            request.resource.data.autorNome.size() > 0 &&
+            request.resource.data.texto is string &&
+            request.resource.data.texto.size() > 0 &&
+            request.resource.data.texto.size() <= 500 &&
+            request.resource.data.criadoEm is timestamp;
+
+        allow update: if false;
+
+        allow delete: if isAdmin() || (
+            signedIn() &&
+            resource.data.autorId == request.auth.uid
+        );
+      }
     }
 
     match /grade_horarios/{gradeHorarioId} {

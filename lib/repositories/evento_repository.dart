@@ -1,14 +1,20 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/evento_comentario.dart';
 import '../models/evento.dart';
+import '../models/evento_reacao.dart';
 import '../services/firebase/storage_service.dart';
 import '../services/firebase/firestore_service.dart';
 
 /// Repositório responsável pelas operações da timeline de avisos.
 class EventoRepository {
   static const String _colecao = 'eventos';
+  static const String _subcolecaoComentarios = 'comentarios';
+  static const String _subcolecaoReacoes = 'reacoes';
+
   final FirestoreService _firestore = FirestoreService();
   final StorageService _storage = StorageService();
   final Uuid _uuid = const Uuid();
@@ -118,6 +124,100 @@ class EventoRepository {
     await _firestore.remover(colecao: _colecao, id: evento.id);
   }
 
+  Stream<List<EventoReacao>> observarReacoes(String eventoId) {
+    return _reacoesRef(eventoId).snapshots().map((snapshot) {
+      final reacoes = snapshot.docs
+          .map((doc) => EventoReacao.fromMap(doc.data(), doc.id))
+          .toList()
+        ..sort(
+          (a, b) => (b.atualizadoEm ?? b.criadoEm)
+              .compareTo(a.atualizadoEm ?? a.criadoEm),
+        );
+      return reacoes;
+    });
+  }
+
+  Stream<List<EventoComentario>> observarComentarios(String eventoId) {
+    return _comentariosRef(eventoId).orderBy('criadoEm').snapshots().map(
+          (snapshot) => snapshot.docs
+              .map((doc) => EventoComentario.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
+  }
+
+  Future<void> alternarReacao({
+    required String eventoId,
+    required String usuarioId,
+    required String usuarioNome,
+    required TipoReacaoEvento tipo,
+  }) async {
+    final nomeLimpo = usuarioNome.trim();
+    if (nomeLimpo.isEmpty) {
+      throw StateError('Nao foi possivel identificar o nome da usuaria.');
+    }
+
+    final ref = _reacoesRef(eventoId).doc(usuarioId);
+    final snapshot = await ref.get();
+    final atual = snapshot.exists
+        ? EventoReacao.fromMap(snapshot.data()!, snapshot.id)
+        : null;
+
+    if (atual?.tipo == tipo) {
+      await ref.delete();
+      return;
+    }
+
+    final agora = DateTime.now();
+    await ref.set(
+      EventoReacao(
+        usuarioId: usuarioId,
+        usuarioNome: nomeLimpo,
+        tipo: tipo,
+        criadoEm: atual?.criadoEm ?? agora,
+        atualizadoEm: atual == null ? null : agora,
+      ).toMap(),
+    );
+  }
+
+  Future<void> adicionarComentario({
+    required String eventoId,
+    required String autorId,
+    required String autorNome,
+    required String texto,
+  }) async {
+    final textoLimpo = texto.trim();
+    final nomeLimpo = autorNome.trim();
+
+    if (nomeLimpo.isEmpty) {
+      throw StateError('Nao foi possivel identificar o nome da usuaria.');
+    }
+
+    if (textoLimpo.isEmpty) {
+      throw StateError('Escreva um comentario antes de enviar.');
+    }
+
+    if (textoLimpo.length > 500) {
+      throw StateError('O comentario pode ter no maximo 500 caracteres.');
+    }
+
+    await _comentariosRef(eventoId).add(
+      EventoComentario(
+        id: '',
+        autorId: autorId,
+        autorNome: nomeLimpo,
+        texto: textoLimpo,
+        criadoEm: DateTime.now(),
+      ).toMap(),
+    );
+  }
+
+  Future<void> removerComentario({
+    required String eventoId,
+    required String comentarioId,
+  }) {
+    return _comentariosRef(eventoId).doc(comentarioId).delete();
+  }
+
   Future<_ImagemAvisoUpload> _uploadImagem(File imagem) async {
     final extensao = _extrairExtensao(imagem.path);
     final nomeArquivo = '${_uuid.v4()}.$extensao';
@@ -133,6 +233,14 @@ class EventoRepository {
     }
 
     return caminho.substring(indice + 1).toLowerCase();
+  }
+
+  CollectionReference<Map<String, dynamic>> _comentariosRef(String eventoId) {
+    return _firestore.colecao('$_colecao/$eventoId/$_subcolecaoComentarios');
+  }
+
+  CollectionReference<Map<String, dynamic>> _reacoesRef(String eventoId) {
+    return _firestore.colecao('$_colecao/$eventoId/$_subcolecaoReacoes');
   }
 }
 

@@ -208,6 +208,8 @@ class _NotificacoesList extends StatelessWidget {
         return Icons.medical_services_outlined;
       case 'horario':
         return Icons.schedule_outlined;
+      case 'comentario_feed':
+        return Icons.mode_comment_outlined;
       default:
         return Icons.notifications_outlined;
     }
@@ -235,6 +237,8 @@ class _NotificacoesList extends StatelessWidget {
         return Colors.green.shade700;
       case 'atestado':
         return Colors.teal.shade700;
+      case 'comentario_feed':
+        return Colors.indigo.shade600;
       default:
         return AppColors.textSecondary;
     }

@@ -2,13 +2,16 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/aviso_timeline_helper.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../models/evento.dart';
+import '../../providers/auth_provider.dart';
 import '../../repositories/evento_repository.dart';
 import '../../widgets/common/loading_indicator.dart';
+import '../../widgets/common/studio_feed_widgets.dart';
 
 class GerenciarAvisosScreen extends StatefulWidget {
   const GerenciarAvisosScreen({super.key});
@@ -18,6 +21,8 @@ class GerenciarAvisosScreen extends StatefulWidget {
 }
 
 class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
+  static const String _nomeStudio = 'Fênix Pole Dance';
+
   final EventoRepository _repo = EventoRepository();
 
   bool _carregando = false;
@@ -72,10 +77,14 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
           criadoEm: DateTime.now(),
         );
 
-        await _repo.criarComImagem(
-          evento: aviso,
-          imagem: resultado.imagemArquivo!,
-        );
+        if (resultado.imagemArquivo != null) {
+          await _repo.criarComImagem(
+            evento: aviso,
+            imagem: resultado.imagemArquivo!,
+          );
+        } else {
+          await _repo.criar(aviso);
+        }
       } else {
         final avisoAtualizado = existente.copyWith(
           titulo: resultado.titulo,
@@ -99,8 +108,8 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
         SnackBar(
           content: Text(
             existente == null
-                ? 'Aviso publicado com sucesso.'
-                : 'Aviso atualizado com sucesso.',
+                ? 'Post publicado com sucesso.'
+                : 'Post atualizado com sucesso.',
           ),
           backgroundColor: AppColors.success,
         ),
@@ -132,8 +141,8 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
         SnackBar(
           content: Text(
             aviso.publicado
-                ? 'Aviso ocultado da timeline.'
-                : 'Aviso publicado para as alunas.',
+                ? 'Post ocultado do feed.'
+                : 'Post publicado para as alunas.',
           ),
         ),
       );
@@ -174,18 +183,19 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
       await _carregarAvisos();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aviso removido.')),
+        const SnackBar(content: Text('Post removido.')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao excluir aviso: $e')),
+        SnackBar(content: Text('Erro ao excluir post: $e')),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final usuarioLogado = context.watch<AuthProvider>().usuario;
     final avisosFiltrados = _avisos.where((aviso) {
       final termo = _busca.trim().toLowerCase();
       if (termo.isEmpty) return true;
@@ -201,19 +211,13 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Timeline de Avisos'),
+        title: const Text('Feed'),
         actions: [
           IconButton(
             onPressed: _carregarAvisos,
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _carregando ? null : _abrirFormulario,
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add_photo_alternate_outlined),
-        label: const Text('Novo aviso'),
       ),
       body: _carregando
           ? const LoadingIndicator()
@@ -222,15 +226,37 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                 children: [
-                  _ResumoAvisosCard(
-                    total: _avisos.length,
-                    publicados: publicados,
+                  StudioFeedSectionHeader(
+                    titulo: 'Destaques',
+                    subtitulo:
+                        '$publicados publicado(s) • ${_avisos.length} post(s) no total',
+                    icone: Icons.auto_awesome_rounded,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+                  StudioFeedHighlightsRow(
+                    posts: _avisos,
+                    nomeStudio: _nomeStudio,
+                    onCriarTap: _abrirFormulario,
+                    onHighlightTap: _abrirFormulario,
+                  ),
+                  const SizedBox(height: 18),
+                  const StudioFeedSectionHeader(
+                    titulo: 'Feed',
+                    subtitulo: 'Compartilhe com a turma',
+                    icone: Icons.dynamic_feed_rounded,
+                  ),
+                  const SizedBox(height: 14),
+                  StudioFeedComposerCard(
+                    nomeStudio: _nomeStudio,
+                    placeholder: 'Compartilhe uma novidade com a turma...',
+                    habilitado: true,
+                    onTap: _abrirFormulario,
+                  ),
+                  const SizedBox(height: 14),
                   TextField(
                     onChanged: (valor) => setState(() => _busca = valor),
                     decoration: InputDecoration(
-                      hintText: 'Buscar aviso, evento ou workshop',
+                      hintText: 'Buscar no feed',
                       prefixIcon: const Icon(Icons.search_rounded),
                       filled: true,
                       fillColor: Colors.white,
@@ -242,358 +268,46 @@ class _GerenciarAvisosScreenState extends State<GerenciarAvisosScreen> {
                   ),
                   const SizedBox(height: 16),
                   if (avisosFiltrados.isEmpty)
-                    const _EstadoVazioAvisos()
+                    const StudioFeedEmptyState(
+                      titulo: 'Nenhum post cadastrado',
+                      descricao:
+                          'Crie o primeiro post para aparecer no feed das alunas.',
+                    )
                   else
                     ...avisosFiltrados.map(
                       (aviso) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _AvisoAdminCard(
-                          aviso: aviso,
-                          onEditar: () => _abrirFormulario(aviso),
-                          onAlternarPublicacao: () =>
-                              _alternarPublicacao(aviso),
-                          onExcluir: () => _excluirAviso(aviso),
+                        child: StudioFeedPostCard(
+                          key: ValueKey(aviso.id),
+                          post: aviso,
+                          nomeAutor: _nomeStudio,
+                          badge: aviso.publicado ? 'ESCOLA' : 'RASCUNHO',
+                          badgeColor: aviso.publicado
+                              ? AppColors.accentCocoa
+                              : AppColors.textHint,
+                          usuarioId: usuarioLogado?.id,
+                          nomeUsuario: usuarioLogado?.nome,
+                          podeModerarComentarios:
+                              usuarioLogado?.tipoUsuario == 'admin',
+                          onActionSelected: (acao) {
+                            switch (acao) {
+                              case StudioFeedPostAction.editar:
+                                _abrirFormulario(aviso);
+                                break;
+                              case StudioFeedPostAction.alternarPublicacao:
+                                _alternarPublicacao(aviso);
+                                break;
+                              case StudioFeedPostAction.excluir:
+                                _excluirAviso(aviso);
+                                break;
+                            }
+                          },
                         ),
                       ),
                     ),
                 ],
               ),
             ),
-    );
-  }
-}
-
-class _ResumoAvisosCard extends StatelessWidget {
-  final int total;
-  final int publicados;
-
-  const _ResumoAvisosCard({required this.total, required this.publicados});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            AppColors.primaryDark,
-            AppColors.primary,
-            AppColors.accentCocoa,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryDark.withValues(alpha: 0.16),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Mural visual do estúdio',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Cadastre imagens e textos para alimentar automaticamente a timeline das alunas.',
-            style: TextStyle(color: Colors.white70, height: 1.35),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _ResumoAvisoPill(titulo: 'Total cadastrados', valor: '$total'),
-              _ResumoAvisoPill(titulo: 'Publicados', valor: '$publicados'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResumoAvisoPill extends StatelessWidget {
-  final String titulo;
-  final String valor;
-
-  const _ResumoAvisoPill({required this.titulo, required this.valor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            valor,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(titulo, style: const TextStyle(color: Colors.white70)),
-        ],
-      ),
-    );
-  }
-}
-
-class _EstadoVazioAvisos extends StatelessWidget {
-  const _EstadoVazioAvisos();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: const Column(
-        children: [
-          Icon(
-            Icons.campaign_outlined,
-            size: 52,
-            color: AppColors.primaryLight,
-          ),
-          SizedBox(height: 14),
-          Text(
-            'Nenhum aviso cadastrado',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Crie o primeiro conteúdo visual para aparecer na timeline das alunas.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AvisoAdminCard extends StatelessWidget {
-  final Evento aviso;
-  final VoidCallback onEditar;
-  final VoidCallback onAlternarPublicacao;
-  final VoidCallback onExcluir;
-
-  const _AvisoAdminCard({
-    required this.aviso,
-    required this.onEditar,
-    required this.onAlternarPublicacao,
-    required this.onExcluir,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final categoriaColor = AvisoTimelineHelper.color(aviso.categoria);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onEditar,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: aviso.imagemUrl != null && aviso.imagemUrl!.isNotEmpty
-                    ? Image.network(
-                        aviso.imagemUrl!,
-                        width: 92,
-                        height: 92,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _PlaceholderAvisoImagem(
-                          categoria: aviso.categoria,
-                        ),
-                      )
-                    : _PlaceholderAvisoImagem(categoria: aviso.categoria),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            aviso.titulo,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          onSelected: (valor) {
-                            if (valor == 'editar') onEditar();
-                            if (valor == 'publicar') onAlternarPublicacao();
-                            if (valor == 'excluir') onExcluir();
-                          },
-                          itemBuilder: (context) => [
-                            const PopupMenuItem(
-                              value: 'editar',
-                              child: Text('Editar'),
-                            ),
-                            PopupMenuItem(
-                              value: 'publicar',
-                              child: Text(
-                                aviso.publicado ? 'Despublicar' : 'Publicar',
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'excluir',
-                              child: Text('Excluir'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _BadgeAvisoAdmin(
-                          label: AvisoTimelineHelper.label(aviso.categoria),
-                          color: categoriaColor,
-                        ),
-                        _BadgeAvisoAdmin(
-                          label: DateFormatter.data(aviso.dataHora),
-                          color: AppColors.secondary,
-                        ),
-                        _BadgeAvisoAdmin(
-                          label: aviso.publicado ? 'Publicado' : 'Rascunho',
-                          color: aviso.publicado
-                              ? AppColors.success
-                              : AppColors.textSecondary,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      aviso.descricao,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                    if (aviso.local != null &&
-                        aviso.local!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on_outlined,
-                            size: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              aviso.local!,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderAvisoImagem extends StatelessWidget {
-  final String categoria;
-
-  const _PlaceholderAvisoImagem({required this.categoria});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = AvisoTimelineHelper.color(categoria);
-
-    return Container(
-      width: 92,
-      height: 92,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color, AppColors.primaryDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Icon(
-        AvisoTimelineHelper.icon(categoria),
-        color: Colors.white,
-      ),
-    );
-  }
-}
-
-class _BadgeAvisoAdmin extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _BadgeAvisoAdmin({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontWeight: FontWeight.w700),
-      ),
     );
   }
 }
@@ -638,7 +352,6 @@ class _FormularioAvisoSheetState extends State<_FormularioAvisoSheet> {
   late String _categoria;
   late bool _publicado;
   File? _imagemArquivo;
-  String? _erroImagem;
 
   @override
   void initState() {
@@ -672,7 +385,6 @@ class _FormularioAvisoSheetState extends State<_FormularioAvisoSheet> {
 
     setState(() {
       _imagemArquivo = File(imagem.path);
-      _erroImagem = null;
     });
   }
 
@@ -700,12 +412,6 @@ class _FormularioAvisoSheetState extends State<_FormularioAvisoSheet> {
 
   void _salvar() {
     if (!_formKey.currentState!.validate()) return;
-
-    if (_imagemArquivo == null &&
-        (widget.aviso?.imagemUrl == null || widget.aviso!.imagemUrl!.isEmpty)) {
-      setState(() => _erroImagem = 'Selecione uma imagem para o aviso.');
-      return;
-    }
 
     Navigator.of(context).pop(
       _FormularioAvisoResultado(
@@ -746,7 +452,7 @@ class _FormularioAvisoSheetState extends State<_FormularioAvisoSheet> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    widget.aviso == null ? 'Novo aviso' : 'Editar aviso',
+                    widget.aviso == null ? 'Novo post' : 'Editar post',
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
@@ -754,7 +460,7 @@ class _FormularioAvisoSheetState extends State<_FormularioAvisoSheet> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Crie um card visual para a timeline automática das alunas.',
+                    'Publique um texto para o feed das alunas. A imagem é opcional.',
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 20),
@@ -807,18 +513,11 @@ class _FormularioAvisoSheetState extends State<_FormularioAvisoSheet> {
                         _imagemArquivo == null &&
                                 (imagemUrlAtual == null ||
                                     imagemUrlAtual.isEmpty)
-                            ? 'Escolher imagem'
+                            ? 'Adicionar imagem opcional'
                             : 'Trocar imagem',
                       ),
                     ),
                   ),
-                  if (_erroImagem != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _erroImagem!,
-                      style: const TextStyle(color: AppColors.error),
-                    ),
-                  ],
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _tituloController,

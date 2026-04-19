@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/constants/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/helpers.dart';
@@ -129,13 +128,12 @@ class AlunaDrawer extends StatelessWidget {
                       cor: AppColors.accentSand,
                       rota: Routes.minhaJornada,
                     ),
-                    if (AppConstants.muralEstudioHabilitado)
-                      _DrawerItem(
-                        icone: Icons.campaign_outlined,
-                        rotulo: 'Avisos',
-                        cor: AppColors.accentCaramel,
-                        rota: Routes.eventos,
-                      ),
+                    _DrawerItem(
+                      icone: Icons.dynamic_feed_rounded,
+                      rotulo: 'Feed',
+                      cor: AppColors.accentCaramel,
+                      rota: Routes.eventos,
+                    ),
                     _DrawerItem(
                       icone: Icons.person_outline,
                       rotulo: 'Meu Perfil',

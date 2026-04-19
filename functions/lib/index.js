@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notificarRemocaoHorarioFixo = exports.notificarResultadoAtestado = exports.notificarMovimentoConquistado = exports.notificarStatusMigracaoPlano = exports.notificarSolicitacaoMigracaoPlanoPendente = exports.notificarStatusCadastro = exports.notificarNovoCadastroPendente = exports.enviarLembretesRenovacaoPlano = exports.enviarLembretesAulasDoDia = exports.notificarCancelamentosDeAula = exports.sincronizarMinhasAulasPassadas = exports.contratarPlano = exports.obterAgendaGradePeriodo = exports.obterOcupacaoHorarios = exports.sincronizarInativas = exports.excluirAluna = exports.darBaixaDiariaAulas = void 0;
+exports.notificarRemocaoHorarioFixo = exports.notificarResultadoAtestado = exports.notificarMovimentoConquistado = exports.notificarStatusMigracaoPlano = exports.notificarSolicitacaoMigracaoPlanoPendente = exports.notificarStatusCadastro = exports.notificarNovoComentarioFeed = exports.notificarNovoCadastroPendente = exports.enviarLembretesRenovacaoPlano = exports.enviarLembretesAulasDoDia = exports.notificarCancelamentosDeAula = exports.sincronizarMinhasAulasPassadas = exports.contratarPlano = exports.obterAgendaGradePeriodo = exports.obterOcupacaoHorarios = exports.sincronizarInativas = exports.excluirAluna = exports.darBaixaDiariaAulas = void 0;
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -996,6 +996,44 @@ exports.notificarNovoCadastroPendente = (0, firestore_1.onDocumentWritten)({ doc
         dados: {
             tipo: "cadastro_pendente",
             usuarioId: event.params.usuarioId,
+        },
+    });
+});
+exports.notificarNovoComentarioFeed = (0, firestore_1.onDocumentCreated)({
+    document: "eventos/{eventoId}/comentarios/{comentarioId}",
+    region: REGION,
+}, async (event) => {
+    const comentario = event.data?.data();
+    if (!comentario)
+        return;
+    const eventoId = event.params.eventoId;
+    const comentarioId = event.params.comentarioId;
+    const autorId = typeof comentario.autorId === "string" ? comentario.autorId.trim() : "";
+    const autorNome = typeof comentario.autorNome === "string" &&
+        comentario.autorNome.trim().length > 0
+        ? comentario.autorNome.trim()
+        : "Uma aluna";
+    const adminIds = await listarAdminsAtivos();
+    if (adminIds.length === 0)
+        return;
+    const adminIdsDestino = adminIds.filter((id) => id !== autorId);
+    if (adminIdsDestino.length === 0)
+        return;
+    const eventoSnap = await db.collection("eventos").doc(eventoId).get();
+    const tituloEvento = typeof eventoSnap.data()?.titulo === "string" &&
+        eventoSnap.data()?.titulo.trim().length > 0
+        ? eventoSnap.data().titulo.trim()
+        : "um post do feed";
+    const primeiroNome = extrairPrimeiroNome(autorNome) ?? "Uma aluna";
+    await notificarUsuarios(adminIdsDestino, {
+        titulo: "Novo comentário no feed",
+        mensagem: `${primeiroNome} comentou em \"${tituloEvento}\".`,
+        tipo: "comentario_feed",
+        referenciaId: eventoId,
+        dados: {
+            tipo: "comentario_feed",
+            eventoId,
+            comentarioId,
         },
     });
 });

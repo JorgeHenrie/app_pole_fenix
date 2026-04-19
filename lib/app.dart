@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants/routes.dart';
@@ -17,7 +16,7 @@ import 'screens/aluna/agendar_aula_screen.dart';
 import 'screens/aluna/minhas_aulas_screen.dart';
 import 'screens/aluna/minha_jornada_screen.dart';
 import 'screens/aluna/meu_plano_screen.dart';
-import 'screens/aluna/eventos_screen.dart';
+import 'screens/aluna/feed_screen.dart';
 import 'screens/aluna/perfil_screen.dart';
 import 'screens/aluna/meus_horarios_screen.dart';
 import 'screens/aluna/minhas_reposicoes_screen.dart';
@@ -70,9 +69,7 @@ class App extends StatelessWidget {
         Routes.meuPlano: (context) => const MeuPlanoScreen(),
         Routes.minhaJornada: (context) => const MinhaJornadaScreen(),
         Routes.perfil: (context) => const PerfilScreen(),
-        Routes.eventos: (context) => AppConstants.muralEstudioHabilitado
-            ? const EventosScreen()
-            : const _MuralTemporariamenteIndisponivelScreen(),
+        Routes.eventos: (context) => const FeedScreen(),
         Routes.homeAdmin: (context) => const HomeAdminScreen(),
         Routes.agendaAdmin: (context) => const AgendaAdminScreen(),
         Routes.gerenciarHorarios: (context) => const GerenciarHorariosScreen(),
@@ -113,46 +110,6 @@ class App extends StatelessWidget {
         Routes.validarAtestados: (context) => const ValidarAtestadosScreen(),
         Routes.notificacoes: (context) => const NotificacoesScreen(),
       },
-    );
-  }
-}
-
-class _MuralTemporariamenteIndisponivelScreen extends StatelessWidget {
-  const _MuralTemporariamenteIndisponivelScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mural do Estudio')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.campaign_outlined,
-                size: 56,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Mural temporariamente indisponivel',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Essa area foi desativada por enquanto e voltara quando o estudio decidir reabrir o mural.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
