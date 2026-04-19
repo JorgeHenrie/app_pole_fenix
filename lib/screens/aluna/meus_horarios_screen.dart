@@ -7,11 +7,13 @@ import '../../models/aula.dart';
 import '../../models/horario_fixo.dart';
 import '../../models/reposicao.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/grade_horario_provider.dart';
 import '../../providers/horario_fixo_provider.dart';
 import '../../repositories/aula_repository.dart';
 import '../../repositories/assinatura_repository.dart';
 import '../../repositories/reposicao_repository.dart';
 import '../../services/geracao_aulas_service.dart';
+import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 class MeusHorariosScreen extends StatefulWidget {
@@ -70,7 +72,14 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: const AlunaDrawer(),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Meus Horários'),
         actions: [
           IconButton(
@@ -232,7 +241,14 @@ class _MeusHorariosScreenState extends State<MeusHorariosScreen> {
           }
           if (mounted) {
             if (usuario != null) {
-              await _carregarProximasAulas(usuario.id);
+              await Future.wait([
+                _carregarProximasAulas(usuario.id),
+                context.read<GradeHorarioProvider>().carregar(
+                      usuario.id,
+                      nomeAluna: usuario.nome,
+                    ),
+              ]);
+              if (!mounted) return;
             }
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(

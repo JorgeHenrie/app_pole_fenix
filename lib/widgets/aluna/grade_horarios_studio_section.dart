@@ -562,7 +562,7 @@ class _GradeHorariosStudioSectionState
 
     if (confirmar != true || !context.mounted) return;
 
-    final sucesso = await gradeProvider.agendarReposicao(
+    final erro = await gradeProvider.agendarReposicao(
       reposicao: reposicao,
       slot: slot,
       nomeAluna: nomeAluna,
@@ -571,10 +571,10 @@ class _GradeHorariosStudioSectionState
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(sucesso
-            ? 'Reposição agendada para $hora!'
-            : 'Erro ao agendar. Tente novamente.'),
-        backgroundColor: sucesso ? AppColors.success : AppColors.error,
+        content: Text(
+          erro == null ? 'Reposição agendada para $hora!' : erro,
+        ),
+        backgroundColor: erro == null ? AppColors.success : AppColors.error,
       ),
     );
   }

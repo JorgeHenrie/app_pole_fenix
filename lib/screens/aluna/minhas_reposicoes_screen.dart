@@ -7,6 +7,7 @@ import '../../models/reposicao.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/reposicao_provider.dart';
 import '../../repositories/grade_horario_repository.dart';
+import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 class MinhasReposicoesScreen extends StatefulWidget {
@@ -44,10 +45,28 @@ class _MinhasReposicoesScreenState extends State<MinhasReposicoesScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: const AlunaDrawer(),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Minhas Reposições'),
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
           tabs: const [
             Tab(text: 'Pendentes'),
             Tab(text: 'Agendadas'),
@@ -166,16 +185,21 @@ class _MinhasReposicoesScreenState extends State<MinhasReposicoesScreen>
       builder: (ctx) => _AgendarReposicaoSheet(
         reposicao: reposicao,
         onConfirmar: (dataHora, horarioId) async {
-          final ok = await context.read<ReposicaoProvider>().agendarReposicao(
-                reposicao.id,
-                dataHora,
-                horarioId,
-              );
+          final resultado =
+              await context.read<ReposicaoProvider>().agendarReposicao(
+                    reposicao.id,
+                    dataHora,
+                    horarioId,
+                  );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(ok ? 'Reposição agendada!' : 'Erro ao agendar.'),
-                backgroundColor: ok ? Colors.green : Colors.red,
+                content: Text(
+                  resultado.erro ??
+                      resultado.mensagemSucesso ??
+                      'Reposição agendada!',
+                ),
+                backgroundColor: resultado.sucesso ? Colors.green : Colors.red,
               ),
             );
           }
@@ -496,13 +520,16 @@ class _AgendarReposicaoSheetState extends State<_AgendarReposicaoSheet> {
                         data = data.add(const Duration(days: 1));
                       }
                       final partes = _selecionado!.horario.split(':');
-                      final dataHora = DateTime(
+                      var dataHora = DateTime(
                         data.year,
                         data.month,
                         data.day,
                         int.parse(partes[0]),
                         int.parse(partes[1]),
                       );
+                      if (!dataHora.isAfter(agora)) {
+                        dataHora = dataHora.add(const Duration(days: 7));
+                      }
                       await widget.onConfirmar(dataHora, _selecionado!.id);
                       if (mounted) Navigator.pop(context);
                     },

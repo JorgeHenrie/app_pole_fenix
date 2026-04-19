@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notificarRemocaoHorarioFixo = exports.notificarResultadoAtestado = exports.notificarMovimentoConquistado = exports.notificarStatusMigracaoPlano = exports.notificarSolicitacaoMigracaoPlanoPendente = exports.notificarStatusCadastro = exports.notificarNovoCadastroPendente = exports.enviarLembretesRenovacaoPlano = exports.enviarLembretesAulasDoDia = exports.notificarCancelamentosDeAula = exports.sincronizarMinhasAulasPassadas = exports.contratarPlano = exports.obterOcupacaoHorarios = exports.sincronizarInativas = exports.excluirAluna = exports.darBaixaDiariaAulas = void 0;
+exports.notificarRemocaoHorarioFixo = exports.notificarResultadoAtestado = exports.notificarMovimentoConquistado = exports.notificarStatusMigracaoPlano = exports.notificarSolicitacaoMigracaoPlanoPendente = exports.notificarStatusCadastro = exports.notificarNovoCadastroPendente = exports.enviarLembretesRenovacaoPlano = exports.enviarLembretesAulasDoDia = exports.notificarCancelamentosDeAula = exports.sincronizarMinhasAulasPassadas = exports.contratarPlano = exports.obterAgendaGradePeriodo = exports.obterOcupacaoHorarios = exports.sincronizarInativas = exports.excluirAluna = exports.darBaixaDiariaAulas = void 0;
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -200,6 +200,11 @@ function formatarIsoLocalRR(data) {
     const pad = (valor) => valor.toString().padStart(2, "0");
     return `${data.getUTCFullYear()}-${pad(data.getUTCMonth() + 1)}-${pad(data.getUTCDate())}T${pad(data.getUTCHours())}:${pad(data.getUTCMinutes())}:${pad(data.getUTCSeconds())}.000`;
 }
+function formatarIsoRRNormalizado(data) {
+    const pad = (valor) => valor.toString().padStart(2, "0");
+    const partes = partesDataHoraRR(data);
+    return `${partes.ano}-${pad(partes.mes)}-${pad(partes.dia)}T${pad(partes.hora)}:${pad(partes.minuto)}:${pad(partes.segundo)}.000`;
+}
 function calcularProximasOcorrenciasRR(diaSemana, horario, semanas = 4) {
     const horarioMatch = /^(\d{2}):(\d{2})$/.exec(horario);
     if (!horarioMatch) {
@@ -234,6 +239,29 @@ async function obterNomeUsuario(usuarioId) {
     const snapshot = await db.collection("usuarios").doc(usuarioId).get();
     const nome = snapshot.data()?.nome;
     return typeof nome === "string" && nome.trim().length > 0 ? nome : null;
+}
+function extrairPrimeiroNome(nome) {
+    if (typeof nome !== "string")
+        return null;
+    const limpo = nome.trim();
+    if (limpo.length === 0)
+        return null;
+    const primeiroNome = limpo.split(/\s+/)[0]?.trim();
+    return primeiroNome && primeiroNome.length > 0 ? primeiroNome : null;
+}
+async function obterPrimeirosNomesUsuarios(ids) {
+    const idsUnicos = [...new Set(ids.filter((id) => id.trim().length > 0))];
+    if (idsUnicos.length === 0)
+        return {};
+    const snapshots = await Promise.all(idsUnicos.map((usuarioId) => db.collection("usuarios").doc(usuarioId).get()));
+    const nomesPorId = {};
+    for (const snapshot of snapshots) {
+        const primeiroNome = extrairPrimeiroNome(snapshot.data()?.nome);
+        if (primeiroNome != null) {
+            nomesPorId[snapshot.id] = primeiroNome;
+        }
+    }
+    return nomesPorId;
 }
 async function enviarPushParaUsuarios(usuarioIds, conteudo) {
     const ids = [...new Set(usuarioIds.filter((id) => id.trim().length > 0))];
@@ -474,6 +502,114 @@ exports.obterOcupacaoHorarios = (0, https_1.onCall)({ region: REGION }, async (r
     }
     return { ocupacaoPorGradeHorarioId };
 });
+exports.obterAgendaGradePeriodo = (0, https_1.onCall)({ region: REGION }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Login obrigatório.");
+    }
+    const payload = request.data;
+    const inicio = parseDataApp(payload?.inicio);
+    const limite = parseDataApp(payload?.limite);
+    if (inicio == null || limite == null) {
+        throw new https_1.HttpsError("invalid-argument", "Período inválido.");
+    }
+    if (limite.getTime() < inicio.getTime()) {
+        throw new https_1.HttpsError("invalid-argument", "O limite do período deve ser maior que a data inicial.");
+    }
+    const gradeHorarioIds = Array.isArray(payload?.gradeHorarioIds)
+        ? payload.gradeHorarioIds
+            .filter((item) => typeof item === "string")
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+        : [];
+    const gradeDocs = gradeHorarioIds.length > 0
+        ? await Promise.all([...new Set(gradeHorarioIds)].map((id) => db.collection("grade_horarios").doc(id).get()))
+        : (await db.collection("grade_horarios").where("ativo", "==", true).get())
+            .docs;
+    const gradesAtivas = gradeDocs
+        .filter((doc) => doc.exists && doc.data()?.ativo === true)
+        .map((doc) => ({
+        id: doc.id,
+        diaSemana: doc.data()?.diaSemana,
+        horario: doc.data()?.horario,
+    }));
+    const chavesFixasValidas = new Set(gradesAtivas.map((grade) => `${grade.diaSemana}_${grade.horario}`));
+    const gradeIdsValidos = new Set(gradesAtivas.map((grade) => grade.id));
+    const alunaIdsFixosPorSlot = new Map();
+    const horariosFixosSnap = await db
+        .collection("horarios_fixos")
+        .where("ativo", "==", true)
+        .get();
+    for (const doc of horariosFixosSnap.docs) {
+        const dados = doc.data();
+        const diaSemana = dados.diaSemana;
+        const horario = dados.horario;
+        const alunaId = dados.alunaId;
+        if (typeof diaSemana !== "number" ||
+            typeof horario !== "string" ||
+            typeof alunaId !== "string") {
+            continue;
+        }
+        const chave = `${diaSemana}_${horario}`;
+        if (!chavesFixasValidas.has(chave))
+            continue;
+        const ids = alunaIdsFixosPorSlot.get(chave) ?? new Set();
+        ids.add(alunaId);
+        alunaIdsFixosPorSlot.set(chave, ids);
+    }
+    const alunaIdsReposicoesPorSlot = new Map();
+    const reposicoesSnap = await db
+        .collection("reposicoes")
+        .where("status", "==", "agendada")
+        .get();
+    for (const doc of reposicoesSnap.docs) {
+        const dados = doc.data();
+        const gradeHorarioId = dados.novoHorarioId;
+        const alunaId = dados.alunaId;
+        const dataHora = parseDataApp(dados.novaDataHora);
+        if (typeof gradeHorarioId !== "string" ||
+            typeof alunaId !== "string" ||
+            dataHora == null ||
+            !gradeIdsValidos.has(gradeHorarioId) ||
+            dataHora.getTime() < inicio.getTime() ||
+            dataHora.getTime() > limite.getTime()) {
+            continue;
+        }
+        const chave = `${gradeHorarioId}|${formatarIsoRRNormalizado(dataHora)}`;
+        const ids = alunaIdsReposicoesPorSlot.get(chave) ?? new Set();
+        ids.add(alunaId);
+        alunaIdsReposicoesPorSlot.set(chave, ids);
+    }
+    const todosAlunaIds = new Set();
+    for (const ids of alunaIdsFixosPorSlot.values()) {
+        for (const id of ids) {
+            todosAlunaIds.add(id);
+        }
+    }
+    for (const ids of alunaIdsReposicoesPorSlot.values()) {
+        for (const id of ids) {
+            todosAlunaIds.add(id);
+        }
+    }
+    const nomesPorId = await obterPrimeirosNomesUsuarios([...todosAlunaIds]);
+    const nomesFixosPorSlot = {};
+    for (const [chave, ids] of alunaIdsFixosPorSlot.entries()) {
+        nomesFixosPorSlot[chave] = [...ids]
+            .map((id) => nomesPorId[id])
+            .filter((nome) => typeof nome === "string" && nome.trim().length > 0)
+            .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
+    const nomesReposicoesPorSlot = {};
+    for (const [chave, ids] of alunaIdsReposicoesPorSlot.entries()) {
+        nomesReposicoesPorSlot[chave] = [...ids]
+            .map((id) => nomesPorId[id])
+            .filter((nome) => typeof nome === "string" && nome.trim().length > 0)
+            .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
+    return {
+        nomesFixosPorSlot,
+        nomesReposicoesPorSlot,
+    };
+});
 exports.contratarPlano = (0, https_1.onCall)({ region: REGION }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "Login obrigatório.");
@@ -653,14 +789,17 @@ exports.sincronizarMinhasAulasPassadas = (0, https_1.onCall)({ region: REGION },
         throw new https_1.HttpsError("unauthenticated", "Login obrigatório.");
     }
     const alunaId = request.auth.uid;
-    const agoraRR = formatarIsoLocalRR(obterAgoraRR());
+    const agoraRR = obterAgoraRR();
     const aulasSnap = await db
         .collection("aulas")
         .where("alunaId", "==", alunaId)
         .where("status", "==", "agendada")
-        .where("dataHora", "<", agoraRR)
         .get();
-    if (aulasSnap.empty) {
+    const aulasPassadas = aulasSnap.docs.filter((doc) => {
+        const dataHora = parseDataApp(doc.data().dataHora);
+        return dataHora != null && dataHora.getTime() < agoraRR.getTime();
+    });
+    if (aulasPassadas.length === 0) {
         return { baixas: 0 };
     }
     const assinaturaSnap = await db
@@ -670,17 +809,17 @@ exports.sincronizarMinhasAulasPassadas = (0, https_1.onCall)({ region: REGION },
         .limit(1)
         .get();
     const batch = db.batch();
-    for (const doc of aulasSnap.docs) {
+    for (const doc of aulasPassadas) {
         batch.update(doc.ref, { status: "realizada" });
     }
     if (!assinaturaSnap.empty) {
         batch.update(assinaturaSnap.docs[0].ref, {
-            creditosDisponiveis: admin.firestore.FieldValue.increment(-aulasSnap.size),
-            aulasRealizadas: admin.firestore.FieldValue.increment(aulasSnap.size),
+            creditosDisponiveis: admin.firestore.FieldValue.increment(-aulasPassadas.length),
+            aulasRealizadas: admin.firestore.FieldValue.increment(aulasPassadas.length),
         });
     }
     await batch.commit();
-    return { baixas: aulasSnap.size };
+    return { baixas: aulasPassadas.length };
 });
 exports.notificarCancelamentosDeAula = (0, firestore_1.onDocumentWritten)({ document: "aulas/{aulaId}", region: REGION }, async (event) => {
     const antes = event.data?.before.data();

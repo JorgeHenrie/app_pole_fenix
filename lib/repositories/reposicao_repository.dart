@@ -2,6 +2,8 @@ import '../models/reposicao.dart';
 import '../services/firebase/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../models/aula.dart';
+
 import 'assinatura_repository.dart';
 
 class ReposicaoRepository {
@@ -57,16 +59,52 @@ class ReposicaoRepository {
     DateTime novaDataHora,
     String novoHorarioId,
   ) async {
-    await _firestore.atualizar(
-      colecao: _colecao,
-      id: id,
-      dados: {
+    final db = FirebaseFirestore.instance;
+    final reposicaoRef = db.collection(_colecao).doc(id);
+    final reposicaoSnapshot = await reposicaoRef.get();
+
+    if (!reposicaoSnapshot.exists || reposicaoSnapshot.data() == null) {
+      throw StateError('Reposicao nao encontrada.');
+    }
+
+    final reposicaoAtual =
+        Reposicao.fromMap(reposicaoSnapshot.data()!, reposicaoSnapshot.id);
+
+    await _validarConflitosAgendamento(
+      alunaId: reposicaoAtual.alunaId,
+      reposicaoIdAtual: reposicaoAtual.id,
+      novaDataHora: novaDataHora,
+    );
+
+    await db.runTransaction((transaction) async {
+      final reposicaoSnap = await transaction.get(reposicaoRef);
+      if (!reposicaoSnap.exists || reposicaoSnap.data() == null) {
+        throw StateError('Reposicao nao encontrada.');
+      }
+
+      final reposicaoAtual =
+          Reposicao.fromMap(reposicaoSnap.data()!, reposicaoSnap.id);
+      if (reposicaoAtual.status != 'pendente') {
+        throw StateError(
+            'Essa reposicao nao esta disponivel para agendamento.');
+      }
+
+      final gradeRef = db.collection('grade_horarios').doc(novoHorarioId);
+      final gradeSnap = await transaction.get(gradeRef);
+      final gradeData = gradeSnap.data();
+      if (!gradeSnap.exists ||
+          gradeData == null ||
+          gradeData['ativo'] != true) {
+        throw StateError('Esse horario nao esta mais disponivel.');
+      }
+
+      transaction.update(reposicaoRef, {
         'status': 'agendada',
         'novaDataHora': Timestamp.fromDate(novaDataHora),
         'novoHorarioId': novoHorarioId,
         'agendadaEm': Timestamp.fromDate(DateTime.now()),
-      },
-    );
+      });
+    });
   }
 
   Future<void> desagendar(String id) async {
@@ -149,5 +187,57 @@ class ReposicaoRepository {
 
   bool _statusUsaValidade(String status) {
     return status == 'pendente' || status == 'agendada';
+  }
+
+  Future<void> _validarConflitosAgendamento({
+    required String alunaId,
+    required String reposicaoIdAtual,
+    required DateTime novaDataHora,
+  }) async {
+    final reposicoesDaAlunaSnap = await _firestore
+        .colecao(_colecao)
+        .where('alunaId', isEqualTo: alunaId)
+        .get();
+
+    final conflitoReposicao = reposicoesDaAlunaSnap.docs.any((doc) {
+      if (doc.id == reposicaoIdAtual) return false;
+
+      final reposicao = Reposicao.fromMap(doc.data(), doc.id);
+      return reposicao.status == 'agendada' &&
+          _mesmaDataHora(reposicao.novaDataHora, novaDataHora);
+    });
+
+    if (conflitoReposicao) {
+      throw StateError(
+        'Voce ja possui uma reposicao agendada nesse mesmo horario.',
+      );
+    }
+
+    final aulasDaAlunaSnap = await FirebaseFirestore.instance
+        .collection('aulas')
+        .where('alunaId', isEqualTo: alunaId)
+        .get();
+
+    final conflitoAula = aulasDaAlunaSnap.docs.any((doc) {
+      final aula = Aula.fromMap(doc.data(), doc.id);
+      return aula.status == 'agendada' &&
+          _mesmaDataHora(aula.dataHora, novaDataHora);
+    });
+
+    if (conflitoAula) {
+      throw StateError(
+        'Voce ja esta inscrita em uma aula nesse mesmo horario. Escolha outro.',
+      );
+    }
+  }
+
+  bool _mesmaDataHora(DateTime? a, DateTime b) {
+    if (a == null) return false;
+
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day &&
+        a.hour == b.hour &&
+        a.minute == b.minute;
   }
 }

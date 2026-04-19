@@ -16,6 +16,18 @@ class ResultadoCancelamentoReposicao {
   bool get sucesso => erro == null;
 }
 
+class ResultadoAgendamentoReposicao {
+  final String? erro;
+  final String? mensagemSucesso;
+
+  const ResultadoAgendamentoReposicao({
+    this.erro,
+    this.mensagemSucesso,
+  });
+
+  bool get sucesso => erro == null;
+}
+
 class ReposicaoProvider extends ChangeNotifier {
   final ReposicaoRepository _repository = ReposicaoRepository();
 
@@ -50,7 +62,7 @@ class ReposicaoProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> agendarReposicao(
+  Future<ResultadoAgendamentoReposicao> agendarReposicao(
     String reposicaoId,
     DateTime novaDataHora,
     String novoHorarioId,
@@ -69,10 +81,17 @@ class ReposicaoProvider extends ChangeNotifier {
         return r;
       }).toList();
       notifyListeners();
-      return true;
+      return const ResultadoAgendamentoReposicao(
+        mensagemSucesso: 'Reposicao agendada com sucesso.',
+      );
     } catch (e) {
       debugPrint('ReposicaoProvider.agendarReposicao: $e');
-      return false;
+      final texto = e.toString();
+      return ResultadoAgendamentoReposicao(
+        erro: texto.startsWith('Bad state: ')
+            ? texto.substring('Bad state: '.length)
+            : 'Erro ao agendar a reposicao.',
+      );
     }
   }
 
