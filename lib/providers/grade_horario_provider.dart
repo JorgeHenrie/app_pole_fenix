@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../core/utils/date_formatter.dart';
-import '../models/aula.dart';
 import '../models/assinatura.dart';
 import '../models/grade_horario.dart';
 import '../models/horario_fixo.dart';
@@ -12,6 +11,7 @@ import '../repositories/aula_repository.dart';
 import '../repositories/grade_horario_repository.dart';
 import '../repositories/horario_fixo_repository.dart';
 import '../repositories/reposicao_repository.dart';
+import '../services/firebase/app_functions_service.dart';
 
 /// Representa uma ocorrência específica de um slot da grade do estúdio.
 class SlotDia {
@@ -51,6 +51,7 @@ class GradeHorarioProvider extends ChangeNotifier {
   final GradeHorarioRepository _gradeRepo = GradeHorarioRepository();
   final ReposicaoRepository _reposicaoRepo = ReposicaoRepository();
   final HorarioFixoRepository _horarioFixoRepo = HorarioFixoRepository();
+  final AppFunctionsService _functionsService = AppFunctionsService();
 
   Assinatura? _assinaturaAtual;
   List<SlotDia> _slots = [];
@@ -139,14 +140,13 @@ class GradeHorarioProvider extends ChangeNotifier {
         return d != 0 ? d : a.horario.compareTo(b.horario);
       });
 
-      final nomesFixosPorSlot =
-          await _gradeRepo.buscarNomesFixosPorSlots(grade);
-      final nomesReposicoesPorSlot =
-          await _gradeRepo.buscarNomesReposicoesPorPeriodo(
-        gradeHorarioIds: grade.map((g) => g.id),
+      final agendaGrade = await _functionsService.obterAgendaGradePeriodo(
+        gradeHorarioIds: grade.map((g) => g.id).toList(),
         inicio: inicioSemana,
         limite: limite,
       );
+      final nomesFixosPorSlot = agendaGrade.nomesFixosPorSlot;
+      final nomesReposicoesPorSlot = agendaGrade.nomesReposicoesPorSlot;
 
       final slots = <SlotDia>[];
 
@@ -266,6 +266,7 @@ class GradeHorarioProvider extends ChangeNotifier {
     if (_reposicoesPendentes.isEmpty) return false;
     if (!slot.temVaga) return false;
     if (!_podeEntrarNoSlot(slot.dataHora)) return false;
+    if (alunaEstaInscrita(slot)) return false;
     return _reposicoesPendentes.any((r) =>
         !r.expirou &&
         (r.expiraEm == null || slot.dataHora.isBefore(r.expiraEm!)));
@@ -293,7 +294,7 @@ class GradeHorarioProvider extends ChangeNotifier {
   }
 
   /// Agenda uma reposição no slot indicado.
-  Future<bool> agendarReposicao({
+  Future<String?> agendarReposicao({
     required Reposicao reposicao,
     required SlotDia slot,
     required String nomeAluna,
@@ -329,10 +330,13 @@ class GradeHorarioProvider extends ChangeNotifier {
         ),
       ];
       notifyListeners();
-      return true;
+      return null;
     } catch (e) {
       debugPrint('GradeHorarioProvider.agendarReposicao: $e');
-      return false;
+      final texto = e.toString();
+      return texto.startsWith('Bad state: ')
+          ? texto.substring('Bad state: '.length)
+          : 'Erro ao agendar. Tente novamente.';
     }
   }
 

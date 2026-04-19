@@ -9,6 +9,7 @@ import '../../models/jornada_movimento.dart';
 import '../../models/movimento_pole.dart';
 import '../../providers/auth_provider.dart';
 import '../../repositories/jornada_movimento_repository.dart';
+import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
 import 'detalhe_movimento_jornada_screen.dart';
 
@@ -151,7 +152,14 @@ class _MinhaJornadaScreenState extends State<MinhaJornadaScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: const AlunaDrawer(),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Minha Jornada'),
         actions: [
           IconButton(

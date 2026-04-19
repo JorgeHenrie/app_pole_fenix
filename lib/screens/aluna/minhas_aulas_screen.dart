@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../repositories/aula_repository.dart';
 import '../../repositories/grade_horario_repository.dart';
 import '../../repositories/reposicao_repository.dart';
+import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela com o histórico completo de aulas da aluna.
@@ -137,7 +138,14 @@ class _MinhasAulasScreenState extends State<MinhasAulasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: const AlunaDrawer(),
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Minhas Aulas'),
         actions: [
           IconButton(

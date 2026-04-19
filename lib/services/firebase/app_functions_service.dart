@@ -2,6 +2,16 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import '../../models/grade_horario.dart';
 
+class AgendaGradePeriodoData {
+  final Map<String, List<String>> nomesFixosPorSlot;
+  final Map<String, List<String>> nomesReposicoesPorSlot;
+
+  const AgendaGradePeriodoData({
+    required this.nomesFixosPorSlot,
+    required this.nomesReposicoesPorSlot,
+  });
+}
+
 class AppFunctionsService {
   static const String _region = 'southamerica-east1';
 
@@ -33,6 +43,41 @@ class AppFunctionsService {
           e, 'Nao foi possivel consultar a ocupacao dos horarios.'));
     } catch (_) {
       throw StateError('Nao foi possivel consultar a ocupacao dos horarios.');
+    }
+  }
+
+  Future<AgendaGradePeriodoData> obterAgendaGradePeriodo({
+    required List<String> gradeHorarioIds,
+    required DateTime inicio,
+    required DateTime limite,
+  }) async {
+    try {
+      final resultado =
+          await _functions.httpsCallable('obterAgendaGradePeriodo').call({
+        'gradeHorarioIds': gradeHorarioIds,
+        'inicio': inicio.toIso8601String(),
+        'limite': limite.toIso8601String(),
+      });
+
+      final dados = resultado.data;
+      if (dados is! Map) {
+        return const AgendaGradePeriodoData(
+          nomesFixosPorSlot: {},
+          nomesReposicoesPorSlot: {},
+        );
+      }
+
+      return AgendaGradePeriodoData(
+        nomesFixosPorSlot: _mapaStringList(dados['nomesFixosPorSlot']),
+        nomesReposicoesPorSlot:
+            _mapaStringList(dados['nomesReposicoesPorSlot']),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      throw StateError(
+        _mensagemErro(e, 'Nao foi possivel carregar a agenda da grade.'),
+      );
+    } catch (_) {
+      throw StateError('Nao foi possivel carregar a agenda da grade.');
     }
   }
 
@@ -86,5 +131,22 @@ class AppFunctionsService {
       return mensagem;
     }
     return fallback;
+  }
+
+  Map<String, List<String>> _mapaStringList(dynamic valor) {
+    if (valor is! Map) return {};
+
+    return valor.map(
+      (key, rawList) => MapEntry(
+        key.toString(),
+        rawList is List
+            ? rawList
+                .whereType<String>()
+                .map((item) => item.trim())
+                .where((item) => item.isNotEmpty)
+                .toList()
+            : <String>[],
+      ),
+    );
   }
 }

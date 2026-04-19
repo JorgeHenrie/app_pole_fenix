@@ -99,6 +99,13 @@ class AlunaDrawer extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   children: [
                     _DrawerItem(
+                      icone: Icons.home_rounded,
+                      rotulo: 'Início',
+                      cor: AppColors.primaryDark,
+                      rota: Routes.homeAluna,
+                      limparPilha: true,
+                    ),
+                    _DrawerItem(
                       icone: Icons.schedule,
                       rotulo: 'Meus Horários',
                       cor: AppColors.primary,
@@ -174,12 +181,14 @@ class _DrawerItem extends StatelessWidget {
   final String rotulo;
   final Color cor;
   final String rota;
+  final bool limparPilha;
 
   const _DrawerItem({
     required this.icone,
     required this.rotulo,
     required this.cor,
     required this.rota,
+    this.limparPilha = false,
   });
 
   @override
@@ -202,9 +211,22 @@ class _DrawerItem extends StatelessWidget {
           color: AppColors.textPrimary,
         ),
       ),
-      onTap: () {
-        Navigator.pop(context); // fecha o drawer
-        Navigator.pushNamed(context, rota);
+      onTap: () async {
+        final navigator = Navigator.of(context);
+        final rotaAtual = ModalRoute.of(context)?.settings.name;
+
+        Navigator.pop(context);
+        await Future<void>.delayed(Duration.zero);
+        if (!context.mounted) return;
+
+        if (limparPilha) {
+          if (rotaAtual == rota) return;
+          navigator.pushNamedAndRemoveUntil(rota, (route) => false);
+          return;
+        }
+
+        if (rotaAtual == rota) return;
+        navigator.pushNamed(rota);
       },
     );
   }

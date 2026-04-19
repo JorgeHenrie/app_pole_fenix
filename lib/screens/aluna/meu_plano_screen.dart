@@ -15,6 +15,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/home_aluna_provider.dart';
 import '../../providers/plano_provider.dart';
 import '../../repositories/solicitacao_migracao_plano_repository.dart';
+import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela de planos da aluna, com detalhes, documentos e solicitação de migração.
@@ -365,7 +366,7 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
       );
     } on StateError catch (e) {
       if (!mounted) return;
-      final mensagem = e.message?.toString() ?? e.toString();
+      final mensagem = e.message.toString();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(mensagem)),
       );
@@ -454,7 +455,16 @@ class _MeuPlanoScreenState extends State<MeuPlanoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Planos')),
+      drawer: const AlunaDrawer(),
+      appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+        title: const Text('Planos'),
+      ),
       body: Consumer3<HomeAlunaProvider, AuthProvider, PlanoProvider>(
         builder: (context, homeProvider, authProvider, planoProvider, _) {
           if (homeProvider.carregando ||

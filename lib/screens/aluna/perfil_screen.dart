@@ -13,6 +13,7 @@ import '../../models/usuario.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/home_aluna_provider.dart';
 import '../../services/firebase/storage_service.dart';
+import '../../widgets/aluna/aluna_drawer.dart';
 import '../../widgets/common/loading_indicator.dart';
 
 /// Tela de perfil da aluna com info pessoais, plano e timeline.
@@ -74,6 +75,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: const AlunaDrawer(),
       body: Consumer2<AuthProvider, HomeAlunaProvider>(
         builder: (context, authProvider, homeProvider, _) {
           final usuario = authProvider.usuario;
@@ -91,13 +93,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     children: [
                       const SizedBox(height: 16),
                       _InfoPessoalCard(usuario: usuario),
-                      const SizedBox(height: 16),
-                      if (homeProvider.assinatura != null &&
-                          homeProvider.plano != null)
-                        _PlanoCard(
-                          assinatura: homeProvider.assinatura!,
-                          plano: homeProvider.plano!,
-                        ),
                       const SizedBox(height: 24),
                       _TimelineSection(
                         usuario: usuario,
@@ -121,6 +116,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
       expandedHeight: 200,
       pinned: true,
       backgroundColor: AppColors.primary,
+      leading: Builder(
+        builder: (context) => IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
+      ),
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: const BoxDecoration(
@@ -268,10 +269,10 @@ class _InfoPessoalCard extends StatelessWidget {
               valor: DateFormatter.data(usuario.dataCadastro),
             ),
             _InfoRow(
-              icone: Icons.verified_outlined,
-              label: 'Status',
-              valor: _statusLabel(usuario.statusCadastro),
-              corValor: _statusColor(usuario.statusCadastro),
+              icone: Icons.auto_awesome_outlined,
+              label: 'Nível',
+              valor: _nivelLabel(usuario.nivel),
+              corValor: usuario.nivel?.cor ?? AppColors.textSecondary,
               isLast: true,
             ),
           ],
@@ -280,16 +281,14 @@ class _InfoPessoalCard extends StatelessWidget {
     );
   }
 
-  String _statusLabel(String s) => switch (s) {
-        'aprovado' => 'Aprovada',
-        'pendente' => 'Pendente',
-        _ => 'Rejeitada',
-      };
-
-  Color _statusColor(String s) => switch (s) {
-        'aprovado' => AppColors.success,
-        'pendente' => AppColors.warning,
-        _ => AppColors.error,
+  String _nivelLabel(NivelAluna? nivel) => switch (nivel) {
+        NivelAluna.experimental => 'Experimental',
+        NivelAluna.iniciante => 'Iniciante',
+        NivelAluna.basico => 'Básico',
+        NivelAluna.interI => 'Intermediário I',
+        NivelAluna.interII => 'Intermediário II',
+        NivelAluna.avancado => 'Avançado',
+        null => 'A definir',
       };
 }
 
@@ -340,119 +339,6 @@ class _InfoRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ────────────────────────────────────────────────────────────
-// Card do plano atual
-// ────────────────────────────────────────────────────────────
-class _PlanoCard extends StatelessWidget {
-  final Assinatura assinatura;
-  final Plano plano;
-  const _PlanoCard({required this.assinatura, required this.plano});
-
-  @override
-  Widget build(BuildContext context) {
-    final ativa = assinatura.estaAtiva;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: ativa
-              ? [
-                  const Color(0xFF7B1FA2),
-                  const Color(0xFFAB47BC),
-                ]
-              : [Colors.grey.shade600, Colors.grey.shade400],
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.workspace_premium,
-                    color: Colors.white, size: 22),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    plano.nome,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    ativa ? 'ATIVO' : assinatura.status.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _PlanoStat(
-                    label: 'Créditos',
-                    valor: '${assinatura.creditosDisponiveis}'),
-                _PlanoStat(
-                    label: 'Realizadas',
-                    valor: '${assinatura.aulasRealizadas}'),
-                _PlanoStat(
-                    label: 'Renovação',
-                    valor: DateFormatter.data(assinatura.dataRenovacao)
-                        .substring(0, 5)),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlanoStat extends StatelessWidget {
-  final String label;
-  final String valor;
-  const _PlanoStat({required this.label, required this.valor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            valor,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
           ),
         ],
       ),
