@@ -12,6 +12,9 @@ workflows:
       events:
         - push
       branch_patterns:
+        - pattern: main
+          include: true
+          source: true
         - pattern: chore/ios-setup
           include: true
           source: true
