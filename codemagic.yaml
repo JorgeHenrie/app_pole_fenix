@@ -34,3 +34,36 @@ workflows:
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/ios/iphoneos/*.app
+
+  ios_signed_release:
+    name: iOS Signed IPA
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: fenix-pole-dance-app-store-connect
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.fenixpoledance.appPoleFenix
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        CM_BUILD_DIR: .
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Flutter pub get
+        script: |
+          flutter pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Build signed IPA
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log

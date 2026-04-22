@@ -16,6 +16,14 @@
 3. Rodar `pod install` em ambiente macOS ou deixar o Codemagic executar essa etapa.
 4. Testar o primeiro build iOS remoto e corrigir eventuais falhas de signing.
 
+## IPA assinado no Codemagic
+
+- O repositório agora tem um workflow `ios_signed_release` em `codemagic.yaml` para gerar `.ipa` assinado.
+- Esse workflow espera uma integração App Store Connect no Codemagic com o nome exato `fenix-pole-dance-app-store-connect`.
+- O bundle identifier esperado para signing é `com.fenixpoledance.appPoleFenix`.
+- Antes de rodar esse workflow, é preciso conectar a API key da Apple em `Settings > Integrations > Developer Portal`.
+- Depois disso, o Codemagic precisa ter acesso aos arquivos de signing compatíveis com esse bundle id, seja por fetch automático do Apple Developer Portal ou por upload manual.
+
 ## Variáveis e segredos esperados no Codemagic
 
 - Certificados e perfis Apple.
