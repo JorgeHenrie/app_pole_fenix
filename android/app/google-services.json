@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "897960964094",
+    "project_id": "fenix-pole-dance-aa38a",
+    "storage_bucket": "fenix-pole-dance-aa38a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:897960964094:android:4a19b77de27b87e55f5aaf",
+        "android_client_info": {
+          "package_name": "com.fenixpoledance.app_pole_fenix"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2NtnSNJIPhPnOZlFuNFTyfBYu894HBNU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

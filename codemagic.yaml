@@ -1,0 +1,33 @@
+workflows:
+  ios_preview:
+    name: iOS Preview Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      vars:
+        CM_BUILD_DIR: .
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: chore/ios-setup
+          include: true
+          source: true
+    scripts:
+      - name: Flutter pub get
+        script: |
+          flutter pub get
+      - name: Run tests
+        script: |
+          flutter test
+      - name: Build Android debug
+        script: |
+          flutter build apk --debug
+      - name: Build iOS preview without signing
+        script: |
+          flutter build ios --release --no-codesign
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/ios/iphoneos/*.app
